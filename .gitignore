@@ -1,0 +1,21 @@
+# Data files
+data/*.csv
+data/*.csvZone.Identifier
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
