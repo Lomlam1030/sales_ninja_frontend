@@ -685,45 +685,235 @@ st.markdown("""
 <h2 class="table-header">⏱️ Time Comparison</h2>
 """, unsafe_allow_html=True)
 
-# Prepare time comparison data
-def prepare_time_comparison(data, continent_filter, country_filters, period):
-    if country_filters:
-        comparison_data = data[data['country'].isin(country_filters)].copy()
-        group_cols = ['country']
-    elif continent_filter != "All Continents":
-        comparison_data = data[data['continent'] == continent_filter].copy()
-        group_cols = ['country']
-    else:
-        comparison_data = data.copy()
-        group_cols = ['continent']
+# Add time filters in columns based on view
+st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+
+# Determine number of columns based on view
+if selected_view == "Daily View":
+    time_col1, time_col2, time_col3 = st.columns(3)
+elif selected_view == "Monthly View":
+    time_col1, time_col2 = st.columns(2)
+else:  # Quarterly View
+    time_col1, time_col2 = st.columns(2)
+
+# Get unique years from the data
+years = sorted(sales_df['DateKey'].dt.year.unique())
+
+# Year filter (always visible)
+with time_col1:
+    selected_year = st.selectbox(
+        "Select Year",
+        ["All Years"] + [str(year) for year in years],
+        key="year_filter"
+    )
+
+# Week filter (visible only for daily view)
+if selected_view == "Daily View":
+    with time_col3:
+        week_options = ["All Weeks"] + [f"Week {week:02d}" for week in range(1, 54)]
+        selected_week = st.selectbox(
+            "Select Week",
+            week_options,
+            key="week_filter"
+        )
+        
+        # If a specific week is selected, determine its month
+        if selected_week != "All Weeks":
+            week_num = int(selected_week.split()[1])
+            # Create a sample date for the selected week
+            if selected_year != "All Years":
+                year = int(selected_year)
+            else:
+                year = years[-1]  # Use the most recent year if all years selected
+            
+            # Get the date of the first day of the selected week
+            first_day = pd.Timestamp(f"{year}-01-01") + pd.Timedelta(weeks=week_num-1)
+            # Get the month number (1-12)
+            week_month = first_day.month
+            # Store the month number in session state
+            st.session_state.selected_month = f"{week_month:02d}"
+else:
+    selected_week = "All Weeks"
+
+# Month filter (visible for daily and monthly views)
+if selected_view in ["Daily View", "Monthly View"]:
+    with time_col2:
+        month_options = ["All Months"] + [f"{month:02d}" for month in range(1, 13)]
+        # If a week is selected, use its month, otherwise allow free selection
+        if selected_view == "Daily View" and selected_week != "All Weeks":
+            try:
+                month_index = month_options.index(st.session_state.selected_month)
+                selected_month = st.selectbox(
+                    "Select Month",
+                    month_options,
+                    index=month_index,
+                    key="month_filter"
+                )
+            except (ValueError, AttributeError):
+                selected_month = st.selectbox(
+                    "Select Month",
+                    month_options,
+                    key="month_filter"
+                )
+        else:
+            selected_month = st.selectbox(
+                "Select Month",
+                month_options,
+                key="month_filter"
+            )
+elif selected_view == "Quarterly View":
+    # Quarter filter for quarterly view
+    with time_col2:
+        selected_month = "All Months"  # Keep this for compatibility
+        selected_quarter = st.selectbox(
+            "Select Quarter",
+            ["All Quarters"] + [f"Q{q}" for q in range(1, 5)],
+            key="quarter_filter"
+        )
+else:
+    selected_month = "All Months"
+    selected_quarter = "All Quarters"
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Prepare time comparison data with time filters
+def prepare_time_comparison(data, continent_filter, country_filters, view_period, year_filter, month_filter, week_filter, quarter_filter="All Quarters"):
+    # Start with the original sales data to have access to dates
+    comparison_data = sales_df.copy()
     
-    # Calculate period averages
-    period_avg = comparison_data.groupby(group_cols)['avg_sales'].mean().reset_index()
-    period_total = comparison_data.groupby(group_cols)['total_sales'].sum().reset_index()
+    # Add year column for grouping when showing all years
+    comparison_data['year'] = comparison_data['DateKey'].dt.year
+    
+    # Add period columns based on view type
+    if view_period == "Quarterly View":
+        comparison_data['period'] = comparison_data['DateKey'].dt.quarter
+    elif view_period == "Monthly View":
+        comparison_data['period'] = comparison_data['DateKey'].dt.month
+    elif view_period == "Daily View":
+        comparison_data['period'] = comparison_data['DateKey'].dt.isocalendar().week
+    
+    # Apply time filters based on view period
+    if view_period == "Quarterly View" and quarter_filter != "All Quarters":
+        quarter_num = int(quarter_filter[1])
+        comparison_data = comparison_data[comparison_data['DateKey'].dt.quarter == quarter_num]
+        group_cols = ['year']  # Always include year
+            
+    elif view_period == "Daily View":
+        # Prioritize week filter over month filter
+        if week_filter != "All Weeks":
+            week_num = int(week_filter.split()[1])
+            comparison_data = comparison_data[comparison_data['DateKey'].dt.isocalendar().week == week_num]
+            # Set period to week number for display
+            comparison_data['period'] = week_num
+        elif month_filter != "All Months":
+            comparison_data = comparison_data[comparison_data['DateKey'].dt.month == int(month_filter)]
+        group_cols = ['year']  # Always include year
+            
+    elif view_period == "Monthly View" and month_filter != "All Months":
+        comparison_data = comparison_data[comparison_data['DateKey'].dt.month == int(month_filter)]
+        group_cols = ['year']  # Always include year
+    else:
+        group_cols = ['year']  # Always include year
+    
+    if year_filter != "All Years":
+        comparison_data = comparison_data[comparison_data['DateKey'].dt.year == int(year_filter)]
+    
+    # Then apply region filters
+    if country_filters:
+        comparison_data = comparison_data[comparison_data['country'].isin(country_filters)]
+        group_cols = ['country'] + group_cols
+    elif continent_filter != "All Continents":
+        comparison_data = comparison_data[comparison_data['continent'] == continent_filter]
+        group_cols = ['country'] + group_cols
+    else:
+        group_cols = ['continent'] + group_cols
+    
+    # Add period to grouping columns
+    if view_period == "Quarterly View":
+        if quarter_filter == "All Quarters":
+            group_cols.append('period')
+    elif view_period == "Monthly View":
+        if month_filter == "All Months":
+            group_cols.append('period')
+    elif view_period == "Daily View":
+        if week_filter != "All Weeks":
+            group_cols.append('period')
+        elif month_filter == "All Months":
+            group_cols.append('period')
+    
+    # If no data after filtering, return empty DataFrame with correct columns
+    if len(comparison_data) == 0:
+        return pd.DataFrame(columns=['Region', 'Year', 'Period', f'Average per {view_period.split()[0]}', 'Total Sales'])
+    
+    # Calculate averages and totals
+    agg_data = comparison_data.groupby(group_cols).agg({
+        'net_sales': ['mean', 'sum']
+    }).reset_index()
+    
+    # Flatten column names
+    agg_data.columns = group_cols + ['avg_sales', 'total_sales']
     
     # Format currencies
-    period_avg['Average per ' + period] = period_avg['avg_sales'].apply(format_currency)
-    period_total['Total All ' + period + 's'] = period_total['total_sales'].apply(format_currency)
+    agg_data['Average per ' + view_period.split()[0]] = agg_data['avg_sales'].apply(format_currency)
+    agg_data['Total Sales'] = agg_data['total_sales'].apply(format_currency)
     
-    # Merge and clean up
-    final_data = period_avg.merge(period_total, on=group_cols)
-    final_data = final_data.drop(['avg_sales', 'total_sales'], axis=1)
-    
-    # Rename columns
-    if 'country' in group_cols:
-        final_data = final_data.rename(columns={'country': 'Region'})
+    # Format period based on view type
+    if 'period' in agg_data.columns:
+        if view_period == "Quarterly View":
+            agg_data['Period'] = 'Q' + agg_data['period'].astype(str)
+        elif view_period == "Monthly View":
+            agg_data['Period'] = agg_data['period'].apply(lambda x: f"{x:02d}")
+        elif view_period == "Daily View":
+            if week_filter != "All Weeks":
+                agg_data['Period'] = 'Week ' + agg_data['period'].astype(str).str.zfill(2)
+            else:
+                agg_data['Period'] = agg_data['period'].apply(lambda x: f"{x:02d}")
     else:
-        final_data = final_data.rename(columns={'continent': 'Region'})
+        # Format period based on selected filters
+        if view_period == "Quarterly View" and quarter_filter != "All Quarters":
+            agg_data['Period'] = quarter_filter
+        elif view_period == "Daily View" and week_filter != "All Weeks":
+            agg_data['Period'] = week_filter
+        elif view_period in ["Daily View", "Monthly View"] and month_filter != "All Months":
+            agg_data['Period'] = month_filter
+        else:
+            agg_data['Period'] = '-'
     
-    return final_data
+    # Rename region column and select final columns
+    region_col = 'country' if 'country' in group_cols else 'continent'
+    final_data = agg_data.rename(columns={region_col: 'Region', 'year': 'Year'})
+    
+    # Prepare final columns
+    final_cols = ['Region', 'Year', 'Period', f'Average per {view_period.split()[0]}', 'Total Sales']
+        
+    # Ensure all columns exist
+    for col in final_cols:
+        if col not in final_data.columns:
+            final_data[col] = '-'
+    
+    # Sort by Region and Year if present
+    sort_cols = ['Region']
+    if 'Year' in final_cols:
+        sort_cols.append('Year')
+    final_data = final_data.sort_values(sort_cols)
+    
+    return final_data[final_cols]
 
-# Get time comparison data
+# Get time comparison data with time filters
 time_comparison = prepare_time_comparison(
     table_df,
     selected_continent,
     selected_countries,
-    period_label
+    selected_view,
+    selected_year,
+    selected_month,
+    selected_week,
+    selected_quarter if selected_view == "Quarterly View" else "All Quarters"
 )
+
+# Add a message if no data is available for the selected filters
+if len(time_comparison) == 0:
+    st.warning("No data available for the selected time period.")
 
 # Display time comparison table
 st.dataframe(
@@ -735,12 +925,16 @@ st.dataframe(
             "Region",
             width="medium"
         ),
-        f"Average per {period_label}": st.column_config.TextColumn(
-            f"Average per {period_label}",
+        "Period": st.column_config.TextColumn(
+            "Period",
+            width="small"
+        ),
+        f"Average per {selected_view.split()[0]}": st.column_config.TextColumn(
+            f"Average per {selected_view.split()[0]}",
             width="large"
         ),
-        f"Total All {period_label}s": st.column_config.TextColumn(
-            f"Total All {period_label}s",
+        "Total Sales": st.column_config.TextColumn(
+            "Total Sales",
             width="large"
         )
     }
