@@ -4,16 +4,17 @@ import folium
 from streamlit_folium import folium_static
 import json
 import branca.colormap as cm
-from pathlib import Path
 from utils.page_config import set_page_config, add_page_title
-from utils.theme import COLORS, CHART_COLORS, get_chart_template, get_css
-import plotly.express as px
+from utils.theme import get_css, get_chart_template
 import plotly.graph_objects as go
+import numpy as np
+import calendar
+import plotly.express as px
 
 # Configure the page
-set_page_config(title="Geography")
+st.set_page_config(layout="wide", page_title="Geography - Sales Ninja")
 
-# Add the styled title and CSS
+# Add CSS and title
 st.markdown(get_css(), unsafe_allow_html=True)
 add_page_title(
     title="Geographic Sales Distribution",
@@ -21,220 +22,95 @@ add_page_title(
     emoji="🌍"
 )
 
-st.markdown("""
-<style>
-/* Remove all vertical lines */
-[data-testid="stSidebar"] > div:first-child,
-[data-testid="stSidebarNav"] > ul,
-[data-testid="stSidebarNav"] > ul > li > div,
-[data-testid="stSidebarNav"] > ul > li > a,
-.block-container,
-.element-container,
-.stMarkdown,
-.stMarkdown h1,
-.stMarkdown h2,
-.stMarkdown h3,
-section[data-testid="stSidebar"],
-.main .block-container {
-    border-left: none !important;
-    border-right: none !important;
-    padding-left: 0 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# Define warm color palette at the top of the file
+warm_colors = ["#FF4B4B", "#FF8C00", "#FFD700"]  # Red, Dark Orange, Gold
 
-def get_weeks_for_month(df, month):
-    """Get the weeks that fall within a specific month"""
-    if month == "All Months":
-        return sorted(df['DateKey'].dt.isocalendar().week.unique())
-    
-    month_num = int(month)
-    month_data = df[df['DateKey'].dt.month == month_num]
-    return sorted(month_data['DateKey'].dt.isocalendar().week.unique())
-
-def get_month_for_week(df, week_num):
-    """Get the month that contains the given week"""
-    if week_num == "All Weeks":
-        return "All Months"
-    
-    week = int(week_num.split()[1])
-    week_data = df[df['DateKey'].dt.isocalendar().week == week]
-    if len(week_data) > 0:
-        month = week_data.iloc[0]['DateKey'].month
-        return f"{month:02d}"
-    return "All Months"
-
-@st.cache_data
-def load_geojson():
-    """Load GeoJSON data for the world map"""
-    try:
-        with open('data/world-countries.json') as f:
-            return json.load(f)
-    except Exception as e:
-        st.error(f"Error loading GeoJSON data: {str(e)}")
-        return None
-
-def aggregate_by_period(df, freq='D'):
-    """
-    Aggregate sales data by the specified frequency.
-    Returns the average sales per period (day/month/quarter) for each country.
-    """
-    df = df.copy()
-    
-    if freq == 'D':
-        # Daily average - first get total sales per day per country
-        daily_totals = df.groupby(['DateKey', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        # Then get the average daily sales for each country
-        return daily_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
-            
-    elif freq == 'M':
-        # Monthly average
-        df['year_month'] = df['DateKey'].dt.to_period('M')
-        monthly_totals = df.groupby(['year_month', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        return monthly_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
-            
-    else:  # 'Q'
-        # Quarterly average
-        df['year_quarter'] = df['DateKey'].dt.to_period('Q')
-        quarterly_totals = df.groupby(['year_quarter', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        return quarterly_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
-
-def aggregate_by_period_with_totals(df, freq='D'):
-    """
-    Aggregate sales data by the specified frequency.
-    Returns both average and total sales per period for each country.
-    """
-    df = df.copy()
-    
-    if freq == 'D':
-        # Daily aggregation
-        daily_totals = df.groupby(['DateKey', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        result = daily_totals.groupby(['country_geojson', 'country', 'continent']).agg({
-            'net_sales': ['mean', 'sum']
-        }).reset_index()
-        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
-        return result
-            
-    elif freq == 'M':
-        # Monthly aggregation
-        df['year_month'] = df['DateKey'].dt.to_period('M')
-        monthly_totals = df.groupby(['year_month', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        result = monthly_totals.groupby(['country_geojson', 'country', 'continent']).agg({
-            'net_sales': ['mean', 'sum']
-        }).reset_index()
-        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
-        return result
-            
-    else:  # 'Q'
-        # Quarterly aggregation
-        df['year_quarter'] = df['DateKey'].dt.to_period('Q')
-        quarterly_totals = df.groupby(['year_quarter', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
-        result = quarterly_totals.groupby(['country_geojson', 'country', 'continent']).agg({
-            'net_sales': ['mean', 'sum']
-        }).reset_index()
-        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
-        return result
+# Helper Functions
+def format_currency(value):
+    """Format a numeric value as currency"""
+    if pd.isna(value):
+        return "$0.00"
+    if value >= 1e9:
+        return f"${value/1e9:.2f}B"
+    elif value >= 1e6:
+        return f"${value/1e6:.2f}M"
+    else:
+        return f"${value:,.2f}"
 
 @st.cache_data
 def get_country_name_mapping():
     """Return mapping of country names to GeoJSON country names"""
     return {
         'United States': 'United States of America',
-        'UK': 'United Kingdom',
         'United Kingdom': 'United Kingdom',
         'Germany': 'Germany',
-        'Germany ': 'Germany',
         'France': 'France',
-        'Australia': 'Australia',
         'Canada': 'Canada',
         'Mexico': 'Mexico',
-        'Brazil': 'Brazil',
         'Spain': 'Spain',
         'Italy': 'Italy',
-        'Italy ': 'Italy',
         'Netherlands': 'Netherlands',
-        'the Netherlands': 'Netherlands',
         'Belgium': 'Belgium',
         'Switzerland': 'Switzerland',
         'Austria': 'Austria',
         'Sweden': 'Sweden',
-        'Sweden ': 'Sweden',
         'Norway': 'Norway',
         'Denmark': 'Denmark',
-        'Denmark ': 'Denmark',
         'Finland': 'Finland',
+        'Ireland': 'Ireland',
+        'Poland': 'Poland',
+        'Greece': 'Greece',
         'Japan': 'Japan',
         'China': 'China',
         'India': 'India',
         'South Korea': 'Korea, Republic of',
         'Singapore': 'Singapore',
-        'New Zealand': 'New Zealand',
-        'Bhutan': 'Bhutan',
-        'Russia': 'Russia',
         'Taiwan': 'Taiwan',
-        'Syria': 'Syria',
-        'Kyrgyzstan': 'Kyrgyzstan',
-        'Iran': 'Iran',
-        'Ireland': 'Ireland',
-        'Ireland ': 'Ireland',
-        'Slovenia': 'Slovenia',
         'Thailand': 'Thailand',
-        'Turkmenistan': 'Turkmenistan',
-        'Romania': 'Romania',
-        'Romania ': 'Romania',
-        'Portugal': 'Portugal',
-        'Pakistan': 'Pakistan',
-        'Armenia': 'Armenia',
-        'Greece': 'Greece',
-        'Greece ': 'Greece',
-        'Malta': 'Malta',
-        'Poland': 'Poland',
-        'Poland ': 'Poland'
+        'Malaysia': 'Malaysia',
+        'Vietnam': 'Vietnam',
+        'Costa Rica': 'Costa Rica',
+        'Panama': 'Panama',
+        'Guatemala': 'Guatemala',
+        'Honduras': 'Honduras',
+        'Nicaragua': 'Nicaragua',
+        'El Salvador': 'El Salvador',
+        'Belize': 'Belize'
     }
 
 @st.cache_data
-def load_sales_data():
-    """Load and prepare sales data from CSV"""
+def load_geojson():
+    """Load and cache the GeoJSON data"""
     try:
-        file_path = 'data/data_dashboard_final.csv'
-        if not Path(file_path).exists():
-            st.error(f"Data file not found at: {file_path}")
-            return None
+        with open('data/world-countries.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error("Could not find GeoJSON file.")
+        return None
 
-        df = pd.read_csv(file_path, usecols=[
-            'DateKey', 'SalesAmount', 'CalendarYear', 'CalendarQuarterLabel',
-            'CalendarMonthLabel', 'ContinentName', 'RegionCountryName'
-        ])
+@st.cache_data(ttl=None, show_spinner=True)
+def load_sales_data():
+    """Load and prepare sales data"""
+    try:
+        df = pd.read_csv('data/sample_data_geography.csv',
+            parse_dates=['DateKey'])
         
-        df['DateKey'] = pd.to_datetime(df['DateKey'])
-        df['year'] = df['DateKey'].dt.year
-        
-        # Clean country names by trimming whitespace
+        # Clean and prepare data
         df['RegionCountryName'] = df['RegionCountryName'].str.strip()
         
-        # Get country name mapping
+        # Map country names
         country_mapping = get_country_name_mapping()
-        
-        # Map country names to GeoJSON country names
         df['country_geojson'] = df['RegionCountryName'].map(country_mapping)
-        
-        # Log unmapped countries
-        unmapped_countries = df[df['country_geojson'].isna()]['RegionCountryName'].unique()
-        if len(unmapped_countries) > 0:
-            st.warning(f"Some countries could not be mapped: {', '.join(sorted(unmapped_countries))}")
-        
-        # Remove rows with unmapped countries
         df = df[df['country_geojson'].notna()]
         
-        if len(df) == 0:
-            st.error("No data available after mapping countries. Please check the country mapping.")
-            return None
-        
-        # Rename columns to match our expected format
+        # Rename columns
         df = df.rename(columns={
             'RegionCountryName': 'country',
             'ContinentName': 'continent',
-            'SalesAmount': 'net_sales'
+            'SalesAmount': 'sales',
+            'CalendarYear': 'year',
+            'CalendarMonth': 'month',
+            'CalendarWeek': 'week'
         })
         
         return df
@@ -243,976 +119,592 @@ def load_sales_data():
         st.error(f"Error loading data: {str(e)}")
         return None
 
-# Load the data
-if 'sales_df' not in st.session_state:
-    st.session_state.sales_df = load_sales_data()
-
-sales_df = st.session_state.sales_df
-if sales_df is None:
-    st.error("Failed to load sales data. Please check the data file.")
-    st.stop()
-
-geo_data = load_geojson()
-
-# Main content styling
-st.markdown("""
-<style>
-.main-title {
-    font-size: 42px;
-    font-weight: bold;
-    color: #ff5722;  /* Deep orange for main title */
-    margin-bottom: 20px;
-    text-align: center;
-}
-.map-section {
-    background-color: rgba(0,0,0,0);
-    padding: 20px;
-    border-radius: 5px;
-    margin-top: 30px;
-    width: 100%;
-}
-.map-container {
-    border: 2px solid rgba(46, 204, 113, 0.3);
-    border-radius: 10px;
-    overflow: hidden;
-    margin: 20px auto;
-    width: 100%;
-    background: rgba(14, 17, 23, 0.2);
-    transition: all 0.3s ease;
-}
-.map-container:hover {
-    border-color: rgba(46, 204, 113, 0.6);
-    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
-}
-.folium-map {
-    width: 100% !important;
-    height: 500px !important;
-}
-[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
-.kpi-container {
-    padding: 1rem;
-    border-radius: 10px;
-    margin-top: 2rem;
-    background-color: rgba(14, 17, 23, 0.2);
-}
-.kpi-metric {
-    background: linear-gradient(135deg, rgba(244, 81, 30, 0.1) 0%, rgba(255, 87, 34, 0.1) 100%);
-    border: 2px solid rgba(230, 74, 25, 0.3);
-    border-radius: 10px;
-    padding: 1rem;
-    text-align: center;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 0.5rem;
-}
-.kpi-metric:hover {
-    border-color: rgba(216, 67, 21, 0.6);
-    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
-}
-.kpi-value-container {
-    padding: 0.5rem;
-    background-color: rgba(244, 81, 30, 0.1);
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-}
-.kpi-value {
-    color: #ff5722;
-    font-size: 2rem;
-    font-weight: bold;
-    line-height: 1.2;
-    margin: 0;
-    padding: 0.5rem;
-}
-.kpi-label {
-    color: #fafafa;
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding: 0.5rem;
-    background-color: rgba(230, 74, 25, 0.1);
-    border-radius: 8px;
-    margin-top: auto;
-}
-.chart-section {
-    margin-top: 2rem;
-    padding: 1rem;
-    background-color: rgba(14, 17, 23, 0.2);
-    border-radius: 10px;
-    border: 2px solid rgba(230, 74, 25, 0.3);  /* Reddish-orange for border */
-}
-.chart-section:hover {
-    border-color: rgba(216, 67, 21, 0.6);  /* Deep reddish-orange for hover */
-    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);  /* Deep orange for shadow */
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Create radio buttons for view selection
-view_options = ["Daily View", "Monthly View", "Quarterly View"]
-selected_view = st.radio("Select View", view_options, horizontal=True)
-
-# Get the appropriate view based on selection
-period_label = "Day" if selected_view == "Daily View" else "Month" if selected_view == "Monthly View" else "Quarter"
-
-# Get the appropriate view based on selection
-if selected_view == "Daily View":
-    display_df = aggregate_by_period(sales_df, 'D')
-    table_df = aggregate_by_period_with_totals(sales_df, 'D')
-elif selected_view == "Monthly View":
-    display_df = aggregate_by_period(sales_df, 'M')
-    table_df = aggregate_by_period_with_totals(sales_df, 'M')
-else:  # Quarterly View
-    display_df = aggregate_by_period(sales_df, 'Q')
-    table_df = aggregate_by_period_with_totals(sales_df, 'Q')
-
-# Debug information in sidebar
-st.sidebar.markdown("### Current view: " + selected_view.split()[0])
-
-# Show number of countries and sample
-num_countries = len(table_df['country'].unique())
-sample_countries = ", ".join(sorted(table_df['country'].unique())[:5])
-st.sidebar.markdown(f"Number of Countries: {num_countries}")
-st.sidebar.markdown(f"Sample Countries: {sample_countries}")
-
-# Map section
-st.markdown('<div class="map-section">', unsafe_allow_html=True)
-
-# Add section header
-st.markdown(f"""
-<style>
-.section-header {{
-    color: #2ecc71;
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 20px;
-    padding-left: 10px;
-    border-left: 4px solid #2ecc71;
-}}
-</style>
-<h2 class="section-header">📍 Geographic Sales Distribution (per {period_label})</h2>
-""", unsafe_allow_html=True)
-
-if geo_data:
-    # Create a base map
-    m = folium.Map(
-        location=[30, 0],
-        zoom_start=2,
-        tiles='cartodbdark_matter',
-        min_zoom=2,
-        max_zoom=6
-    )
+@st.cache_data
+def get_aggregated_data(df, selected_year=None):
+    """Get aggregated data by country"""
+    if df is None or len(df) == 0:
+        return pd.DataFrame(columns=['country_geojson', 'country', 'continent', 'sales_mean', 'sales_sum'])
     
-    # Calculate sales by country
-    country_sales = display_df.copy()
+    # Filter by year if specified
+    if selected_year and selected_year != "All Years":
+        df = df[df['year'] == int(selected_year)]
+        
+    agg_data = df.groupby(['country_geojson', 'country', 'continent']).agg({
+        'sales': ['mean', 'sum', 'count']
+    }).reset_index()
     
-    # Create color scale
-    min_sales = country_sales['net_sales'].min()
-    max_sales = country_sales['net_sales'].max()
+    # Flatten the column names
+    agg_data.columns = ['country_geojson', 'country', 'continent', 'sales_mean', 'sales_sum', 'sales_count']
+    return agg_data
+
+def create_map(data, geojson_data, metric='sales_sum'):
+    """Create the choropleth map"""
+    if data is None or len(data) == 0:
+        st.warning("No data available for the selected filters.")
+        return None
+        
+    m = folium.Map(location=[20, 0], zoom_start=2, scrollWheelZoom=False)
+    
+    # Create colormap
+    sales_values = data[metric].values
+    if len(sales_values) > 0:
+        vmin = sales_values.min()
+        vmax = sales_values.max()
+    else:
+        vmin = 0
+        vmax = 1
     
     colormap = cm.LinearColormap(
-        colors=['#3498db', '#2ecc71'],  # From blue to green
-        vmin=min_sales,
-        vmax=max_sales
+        colors=['#FFE5B4', '#FFD700', '#FFA500', '#FF4500'],
+        vmin=vmin,
+        vmax=vmax
     )
     
-    # Format sales values for GeoJSON
-    for feature in geo_data['features']:
+    colormap.add_to(m)
+    colormap.caption = 'Total Sales' if metric == 'sales_sum' else 'Average Sales'
+    
+    # Create lookup dictionary
+    country_data = data.set_index('country_geojson').to_dict('index')
+    
+    # Add country polygons
+    for feature in geojson_data['features']:
         country_name = feature['properties']['name']
-        country_data = country_sales[country_sales['country_geojson'] == country_name]
-        if not country_data.empty:
-            sales_value = country_data['net_sales'].values[0]
-            continent = country_data['continent'].values[0]
-            if sales_value >= 1e9:
-                formatted_sales = f"${sales_value/1e9:.2f}B"
-            elif sales_value >= 1e6:
-                formatted_sales = f"${sales_value/1e6:.2f}M"
-            else:
-                formatted_sales = f"${sales_value:,.2f}"
-            feature['properties']['formatted_sales'] = f"{formatted_sales} per {period_label.lower()}"
-            feature['properties']['continent'] = continent
-        else:
-            feature['properties']['formatted_sales'] = "No data"
-            feature['properties']['continent'] = "N/A"
+        if country_name in country_data:
+            data = country_data[country_name]
+            color = colormap(data[metric])
+            
+            tooltip = f"""
+            <b>{country_name}</b><br>
+            Total Sales: {format_currency(data['sales_sum'])}<br>
+            Average Sales: {format_currency(data['sales_mean'])}<br>
+            Number of Sales: {data['sales_count']:,}<br>
+            Continent: {data['continent']}
+            """
+            
+            folium.GeoJson(
+                feature,
+                style_function=lambda x, color=color: {
+                    'fillColor': color,
+                    'fillOpacity': 0.7,
+                    'color': 'black',
+                    'weight': 1,
+                    'dashArray': '5, 5'
+                },
+                tooltip=folium.Tooltip(tooltip)
+            ).add_to(m)
+    
+    return m
 
-    # Add choropleth layer
-    choropleth = folium.Choropleth(
-        geo_data=geo_data,
-        name='choropleth',
-        data=country_sales,
-        columns=['country_geojson', 'net_sales'],
-        key_on='feature.properties.name',
-        fill_color='YlOrRd',
-        fill_opacity=0.7,
-        line_opacity=0.2,
-        legend_name=f'Average Net Sales per {period_label}',
-        smooth_factor=0
-    ).add_to(m)
+def create_bar_chart(data, metric='sales_sum', title=None):
+    """Create bar chart of sales by country"""
+    if data is None or len(data) == 0:
+        st.warning("No data available for visualization.")
+        return None
     
-    # Add hover functionality
-    style_function = lambda x: {
-        'fillColor': '#000000',
-        'color': '#000000',
-        'fillOpacity': 0.1,
-        'weight': 0.1
-    }
-    highlight_function = lambda x: {
-        'fillColor': '#000000',
-        'color': '#2ecc71',
-        'fillOpacity': 0.5,
-        'weight': 2
-    }
-    
-    # Add GeoJson layer with hover effect
-    NIL = folium.features.GeoJson(
-        geo_data,
-        style_function=style_function,
-        control=False,
-        highlight_function=highlight_function,
-        tooltip=folium.features.GeoJsonTooltip(
-            fields=['name', 'continent', 'formatted_sales'],
-            aliases=['Country', 'Continent', 'Net Sales'],
-            style=("background-color: #0e1117; color: #2ecc71; font-family: courier new; font-size: 14px; padding: 10px;")
+    if title is None:
+        title = "Total Sales by Country" if metric == 'sales_sum' else "Average Sales by Country"
+        
+    fig = go.Figure(data=[
+        go.Bar(
+            name='Sales',
+            x=data['country'],
+            y=data[metric],
+            text=[format_currency(val) for val in data[metric]],
+            textposition='auto',
         )
-    )
-    m.add_child(NIL)
-    m.keep_in_front(NIL)
+    ])
     
-    # Add the map to Streamlit
-    st.markdown('<div class="map-container">', unsafe_allow_html=True)
-    folium_static(m, width=None)
-    st.markdown('</div>', unsafe_allow_html=True)
-else:
-    st.error("Unable to load map data. Please try again later.")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Add table section after the map
-st.markdown("""
-<style>
-.table-header {
-    color: #2ecc71;
-    font-size: 24px;
-    font-weight: bold;
-    margin: 30px 0 20px 0;
-    padding-left: 10px;
-    border-left: 4px solid #2ecc71;
-}
-.filter-section {
-    background-color: rgba(46, 204, 113, 0.05);
-    border-radius: 10px;
-    padding: 1rem;
-    margin: 1rem 0;
-}
-.stDataFrame {
-    font-size: 16px !important;
-}
-[data-testid="stDataFrameResizable"] {
-    background-color: rgba(46, 204, 113, 0.05);
-    border-radius: 10px;
-    padding: 1rem;
-    margin: 1rem 0;
-}
-[data-testid="stDataFrameResizable"] td {
-    background-color: transparent !important;
-}
-[data-testid="stDataFrameResizable"] th {
-    background-color: rgba(46, 204, 113, 0.1) !important;
-    color: #2ecc71 !important;
-}
-</style>
-<h2 class="table-header">📊 Sales by Country</h2>
-""", unsafe_allow_html=True)
-
-# Add filters above the table
-st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-col1, col2 = st.columns(2)
-
-# Create filtered dataset
-filtered_data = table_df.copy()
-
-# Get unique continents and sort them
-continents = sorted(filtered_data['continent'].unique())
-selected_continent = col1.selectbox(
-    "Select Continent",
-    ["All Continents"] + continents,
-    key="continent_filter"
-)
-
-# Apply continent filter and get available countries
-if selected_continent != "All Continents":
-    filtered_data = filtered_data[filtered_data['continent'] == selected_continent]
-    
-# Get available countries based on current filter
-available_countries = sorted(filtered_data['country'].unique())
-selected_countries = col2.multiselect(
-    "Select Countries",
-    available_countries,
-    default=[],
-    key="country_filter"
-)
-
-# Apply country filter
-if selected_countries:
-    filtered_data = filtered_data[filtered_data['country'].isin(selected_countries)]
-
-# Format the sales columns for the filtered data
-def format_currency(value):
-    if value >= 1e9:
-        return f"${value/1e9:.2f}B"
-    elif value >= 1e6:
-        return f"${value/1e6:.2f}M"
-    else:
-        return f"${value:,.2f}"
-
-filtered_data['Average Sales'] = filtered_data['avg_sales'].apply(format_currency)
-filtered_data['Total Sales'] = filtered_data['total_sales'].apply(format_currency)
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Prepare final table with selected columns and renamed
-final_table = filtered_data[[
-    'continent',
-    'country', 
-    'Average Sales',
-    'Total Sales'
-]].rename(columns={
-    'country': 'Country',
-    'continent': 'Continent'
-})
-
-# Add period information to column headers
-final_table = final_table.rename(columns={
-    'Average Sales': f'Average Sales per {period_label}',
-    'Total Sales': f'Total Sales (All {period_label}s)'
-})
-
-# Calculate height based on number of rows
-# Add 3 for header and padding
-num_rows = len(final_table) + 3
-# If less than 10 rows, show all without scrolling
-height = min(max(num_rows * 35, 200), 400) if len(final_table) <= 10 else 400
-
-# Display the table with custom formatting
-st.dataframe(
-    final_table,
-    hide_index=True,
-    height=height,
-    column_config={
-        "continent": st.column_config.TextColumn(
-            "Continent",
-            width="medium"
-        ),
-        "country": st.column_config.TextColumn(
-            "Country",
-            width="medium"
-        ),
-        f"Average Sales per {period_label}": st.column_config.TextColumn(
-            f"Average Sales per {period_label}",
-            width="large"
-        ),
-        f"Total Sales (All {period_label}s)": st.column_config.TextColumn(
-            f"Total Sales (All {period_label}s)",
-            width="large"
-        )
-    }
-)
-
-# Calculate KPIs based on filtered data
-def calculate_kpis(data, continent_filter, country_filters):
-    if country_filters:
-        # Use selected countries
-        filtered_data = data[data['country'].isin(country_filters)]
-        num_countries = len(country_filters)
-        region_type = "Selected Countries"
-    elif continent_filter != "All Continents":
-        # Use selected continent
-        filtered_data = data[data['continent'] == continent_filter]
-        num_countries = len(filtered_data['country'].unique())
-        region_type = continent_filter
-    else:
-        # Use all data
-        filtered_data = data
-        num_countries = len(filtered_data['country'].unique())
-        region_type = "All Continents"
-    
-    avg_sales = filtered_data['avg_sales'].mean()
-    total_sales = filtered_data['total_sales'].sum()
-    
-    # Format the average sales
-    if avg_sales >= 1e9:
-        formatted_avg = f"${avg_sales/1e9:.2f}B"
-    elif avg_sales >= 1e6:
-        formatted_avg = f"${avg_sales/1e6:.2f}M"
-    else:
-        formatted_avg = f"${avg_sales:,.2f}"
-    
-    # Format the total sales
-    if total_sales >= 1e9:
-        formatted_total = f"${total_sales/1e9:.2f}B"
-    elif total_sales >= 1e6:
-        formatted_total = f"${total_sales/1e6:.2f}M"
-    else:
-        formatted_total = f"${total_sales:,.2f}"
-    
-    return formatted_avg, formatted_total, num_countries, region_type
-
-# Get KPI values
-avg_sales, total_sales, num_countries, region_type = calculate_kpis(
-    table_df,
-    selected_continent,
-    selected_countries
-)
-
-# Create three columns for KPIs
-col1, col2, col3 = st.columns(3)
-
-# KPI 1: Average Sales
-with col1:
-    st.metric(
-        f"Average Net Sales per {period_label}",
-        avg_sales,
-        help=region_type
-    )
-
-# KPI 2: Total Sales
-with col2:
-    st.metric(
-        f"Total Net Sales (All {period_label}s)",
-        total_sales,
-        help=region_type
-    )
-
-# KPI 3: Number of Countries
-with col3:
-    st.metric(
-        "Number of Countries",
-        num_countries,
-        help=region_type
-    )
-
-# Add bar chart section
-st.markdown("""
-<h2 class="table-header">📊 Sales Comparison</h2>
-""", unsafe_allow_html=True)
-
-def prepare_bar_chart_data(data, continent_filter, country_filters):
-    """Prepare data for bar chart based on filters"""
-    if country_filters:
-        # Show selected countries
-        chart_data = data[data['country'].isin(country_filters)].copy()
-        group_by = 'country'
-        title = f"Average Sales by Country"
-    elif continent_filter != "All Continents":
-        # Show countries in selected continent
-        chart_data = data[data['continent'] == continent_filter].copy()
-        group_by = 'country'
-        title = f"Average Sales by Country in {continent_filter}"
-    else:
-        # Show all continents
-        chart_data = data.copy()
-        group_by = 'continent'
-        title = "Average Sales by Continent"
-    
-    # Group and calculate averages
-    agg_data = chart_data.groupby(group_by)['avg_sales'].mean().reset_index()
-    agg_data = agg_data.sort_values('avg_sales', ascending=False)  # Sort for better visualization
-    
-    # Create bar chart
-    fig = go.Figure()
-    
-    # Add bars
-    fig.add_trace(go.Bar(
-        x=agg_data['avg_sales'],
-        y=agg_data[group_by],
-        orientation='h',
-        marker_color='#ffd700',  # Dark yellow (gold)
-        text=[f"${x:,.2f}" for x in agg_data['avg_sales']],  # Format as currency
-        textposition='auto',
-    ))
-    
-    # Update layout
     fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.5,
-            xanchor='center'
-        ),
-        xaxis_title="Average Sales ($)",
-        yaxis_title=group_by.title(),
-        height=max(len(agg_data) * 50, 400),  # Dynamic height based on number of bars
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#ffd700'),  # Dark yellow text
-        showlegend=False,
-        margin=dict(l=20, r=20, t=40, b=20),
-        xaxis=dict(
-            showgrid=True,
-            gridcolor='rgba(255, 215, 0, 0.1)',  # Dark yellow grid
-            tickformat="$,.2f"  # Format as currency
-        ),
-        yaxis=dict(
-            showgrid=False,
-            automargin=True
-        ),
-        bargap=0.2
+        title=title,
+        xaxis_title="Country",
+        yaxis_title="Sales Amount",
+        template=get_chart_template(),
+        height=500
     )
     
     return fig
 
-# Get bar chart
-bar_chart = prepare_bar_chart_data(
-    table_df,
-    selected_continent,
-    selected_countries
-)
-
-# Display the bar chart
-st.plotly_chart(bar_chart, use_container_width=True)
-
-# Add time comparison table
-st.markdown("""
-<h2 class="table-header">⏱️ Time Comparison</h2>
-""", unsafe_allow_html=True)
-
-# Time period filters
-if selected_view == "Daily View":
-    time_col1, time_col2, time_col3 = st.columns(3)
-elif selected_view == "Monthly View":
-    time_col1, time_col2 = st.columns(2)
-else:  # Quarterly View
-    time_col1, time_col2 = st.columns(2)
-
-# Get unique years from the data
-years = sorted(sales_df['DateKey'].dt.year.unique())
-
-# Initialize session state for synchronization
-if 'selected_month' not in st.session_state:
-    st.session_state.selected_month = "All Months"
-if 'selected_week' not in st.session_state:
-    st.session_state.selected_week = "All Weeks"
-
-# Year filter (always visible)
-with time_col1:
-    selected_year = st.selectbox(
-        "Select Year",
-        ["All Years"] + [str(year) for year in years],
-        key="year_filter"
-    )
-
-# Month filter (visible for daily and monthly views)
-if selected_view in ["Daily View", "Monthly View"]:
-    with time_col2:
-        month_options = ["All Months"] + [f"{month:02d}" for month in range(1, 13)]
-        
-        def on_month_change():
-            # Update week options when month changes
-            if st.session_state.month_filter != "All Months":
-                available_weeks = get_weeks_for_month(sales_df, st.session_state.month_filter)
-                if st.session_state.week_filter != "All Weeks":
-                    week_num = int(st.session_state.week_filter.split()[1])
-                    if week_num not in available_weeks:
-                        st.session_state.week_filter = "All Weeks"
-            st.session_state.selected_month = st.session_state.month_filter
-        
-        selected_month = st.selectbox(
-            "Select Month",
-            month_options,
-            key="month_filter",
-            on_change=on_month_change
+def create_time_series_chart(data, time_cols, region_col, metric='Total Sales', title=None):
+    """Create time series chart of sales over time"""
+    if data is None or len(data) == 0:
+        st.warning("No data available for visualization.")
+        return None
+    
+    # Create a date-like string for x-axis ordering
+    if 'week' in time_cols:
+        data['period'] = data.apply(
+            lambda x: f"{x['year']}-{x['month']:02d}-W{x['week']:02d}", 
+            axis=1
         )
-
-# Week filter (visible only for daily view)
-if selected_view == "Daily View":
-    with time_col3:
-        def on_week_change():
-            # Update month when week changes
-            if st.session_state.week_filter != "All Weeks":
-                new_month = get_month_for_week(sales_df, st.session_state.week_filter)
-                st.session_state.month_filter = new_month
-                st.session_state.selected_month = new_month
-            st.session_state.selected_week = st.session_state.week_filter
-        
-        # Get weeks based on selected month
-        available_weeks = get_weeks_for_month(sales_df, selected_month)
-        week_options = ["All Weeks"] + [f"Week {week:02d}" for week in available_weeks]
-        
-        selected_week = st.selectbox(
-            "Select Week",
-            week_options,
-            key="week_filter",
-            on_change=on_week_change
+    elif 'month' in time_cols:
+        data['period'] = data.apply(
+            lambda x: f"{x['year']}-{x['month']:02d}", 
+            axis=1
         )
-else:
-    selected_week = "All Weeks"
-
-# Quarter filter (visible only for quarterly view)
-if selected_view == "Quarterly View":
-    with time_col2:
-        selected_month = "All Months"  # Keep this for compatibility
-        selected_quarter = st.selectbox(
-            "Select Quarter",
-            ["All Quarters"] + [f"Q{q}" for q in range(1, 5)],
-            key="quarter_filter"
+    elif 'quarter' in time_cols:
+        data['period'] = data.apply(
+            lambda x: f"{x['year']}-{x['quarter']}", 
+            axis=1
         )
-else:
-    selected_quarter = "All Quarters"
+    else:
+        data['period'] = data['year'].astype(str)
 
-# Prepare time comparison data with time filters
-def prepare_time_comparison(data, continent_filter, country_filters, view_period, year_filter, month_filter, week_filter, quarter_filter="All Quarters"):
-    # Start with the original sales data to have access to dates
-    comparison_data = data.copy()
+    # Create traces for each region
+    fig = go.Figure()
     
-    # Add year column for grouping when showing all years
-    comparison_data['year'] = comparison_data['DateKey'].dt.year
-    
-    # Add period columns based on view type
-    if view_period == "Quarterly View":
-        comparison_data['period'] = comparison_data['DateKey'].dt.quarter
-    elif view_period == "Monthly View":
-        comparison_data['period'] = comparison_data['DateKey'].dt.month
-    elif view_period == "Daily View":
-        comparison_data['period'] = comparison_data['DateKey'].dt.isocalendar().week
-    
-    # Apply time filters based on view period
-    if view_period == "Quarterly View" and quarter_filter != "All Quarters":
-        quarter_num = int(quarter_filter[1])
-        comparison_data = comparison_data[comparison_data['DateKey'].dt.quarter == quarter_num]
-        group_cols = ['year']  # Always include year
-            
-    elif view_period == "Daily View":
-        # Prioritize week filter over month filter
-        if week_filter != "All Weeks":
-            week_num = int(week_filter.split()[1])
-            comparison_data = comparison_data[comparison_data['DateKey'].dt.isocalendar().week == week_num]
-            # Set period to week number for display
-            comparison_data['period'] = week_num
-        elif month_filter != "All Months":
-            comparison_data = comparison_data[comparison_data['DateKey'].dt.month == int(month_filter)]
-        group_cols = ['year']  # Always include year
-            
-    elif view_period == "Monthly View" and month_filter != "All Months":
-        comparison_data = comparison_data[comparison_data['DateKey'].dt.month == int(month_filter)]
-        group_cols = ['year']  # Always include year
-    else:
-        group_cols = ['year']  # Always include year
-    
-    if year_filter != "All Years":
-        comparison_data = comparison_data[comparison_data['DateKey'].dt.year == int(year_filter)]
-    
-    # Then apply region filters
-    if country_filters:
-        comparison_data = comparison_data[comparison_data['country'].isin(country_filters)]
-        group_cols = ['country'] + group_cols
-    elif continent_filter != "All Continents":
-        comparison_data = comparison_data[comparison_data['continent'] == continent_filter]
-        group_cols = ['country'] + group_cols
-    else:
-        group_cols = ['continent'] + group_cols
-    
-    # Add period to grouping columns
-    if view_period == "Quarterly View":
-        if quarter_filter == "All Quarters":
-            group_cols.append('period')
-    elif view_period == "Monthly View":
-        if month_filter == "All Months":
-            group_cols.append('period')
-    elif view_period == "Daily View":
-        if week_filter != "All Weeks":
-            group_cols.append('period')
-        elif month_filter == "All Months":
-            group_cols.append('period')
-    
-    # If no data after filtering, return empty DataFrame with correct columns
-    if len(comparison_data) == 0:
-        return pd.DataFrame(columns=['Region', 'Year', 'Period', f'Average per {view_period.split()[0]}', 'Total Sales'])
-    
-    # Calculate averages and totals
-    agg_data = comparison_data.groupby(group_cols).agg({
-        'net_sales': ['mean', 'sum']
-    }).reset_index()
-    
-    # Flatten column names
-    agg_data.columns = group_cols + ['avg_sales', 'total_sales']
-    
-    # Format currencies
-    agg_data['Average per ' + view_period.split()[0]] = agg_data['avg_sales'].apply(format_currency)
-    agg_data['Total Sales'] = agg_data['total_sales'].apply(format_currency)
-    
-    # Format period based on view type
-    if 'period' in agg_data.columns:
-        if view_period == "Quarterly View":
-            agg_data['Period'] = 'Q' + agg_data['period'].astype(str)
-        elif view_period == "Monthly View":
-            agg_data['Period'] = agg_data['period'].apply(lambda x: f"{x:02d}")
-        elif view_period == "Daily View":
-            if week_filter != "All Weeks":
-                agg_data['Period'] = 'Week ' + agg_data['period'].astype(str).str.zfill(2)
-            else:
-                agg_data['Period'] = agg_data['period'].apply(lambda x: f"{x:02d}")
-    else:
-        # Format period based on selected filters
-        if view_period == "Quarterly View" and quarter_filter != "All Quarters":
-            agg_data['Period'] = quarter_filter
-        elif view_period == "Daily View" and week_filter != "All Weeks":
-            agg_data['Period'] = week_filter
-        elif view_period in ["Daily View", "Monthly View"] and month_filter != "All Months":
-            agg_data['Period'] = month_filter
+    for region in sorted(data[region_col].unique()):
+        region_data = data[data[region_col] == region]
+        
+        # Extract numeric values from currency strings
+        if metric in ['Total Sales', 'Average Sales']:
+            y_values = region_data[metric].str.replace('$', '').str.replace(',', '')
+            y_values = y_values.str.replace('B', '000000000').str.replace('M', '000000')
+            y_values = y_values.astype(float)
+            hover_template = f"{region}<br>Period: %{{x}}<br>{metric}: %{{y:$,.2f}}<extra></extra>"
         else:
-            agg_data['Period'] = '-'
-    
-    # Rename region column and select final columns
-    region_col = 'country' if 'country' in group_cols else 'continent'
-    final_data = agg_data.rename(columns={region_col: 'Region', 'year': 'Year'})
-    
-    # Prepare final columns
-    final_cols = ['Region', 'Year', 'Period', f'Average per {view_period.split()[0]}', 'Total Sales']
+            y_values = region_data[metric].str.replace(',', '').astype(float)
+            hover_template = f"{region}<br>Period: %{{x}}<br>{metric}: %{{y:,.0f}}<extra></extra>"
         
-    # Ensure all columns exist
-    for col in final_cols:
-        if col not in final_data.columns:
-            final_data[col] = '-'
+        fig.add_trace(go.Scatter(
+            x=region_data['period'],
+            y=y_values,
+            name=region,
+            mode='lines+markers',
+            hovertemplate=hover_template
+        ))
     
-    # Sort by Region and Year if present
-    sort_cols = ['Region']
-    if 'Year' in final_cols:
-        sort_cols.append('Year')
-    final_data = final_data.sort_values(sort_cols)
-    
-    return final_data[final_cols]
+    # Update layout
+    if title is None:
+        if len(time_cols) > 1:
+            period_type = time_cols[-1].capitalize()
+        else:
+            period_type = time_cols[0].capitalize()
+        title = f"{metric} by {period_type}"
 
-# Get time comparison data with time filters
-time_comparison = prepare_time_comparison(
-    sales_df,
-    selected_continent,
-    selected_countries,
-    selected_view,
-    selected_year,
-    selected_month,
-    selected_week,
-    selected_quarter if selected_view == "Quarterly View" else "All Quarters"
-)
-
-# Add a message if no data is available for the selected filters
-if len(time_comparison) == 0:
-    st.warning("No data available for the selected time period.")
-
-# Display time comparison table
-st.dataframe(
-    time_comparison,
-    hide_index=True,
-    height=min(max((len(time_comparison) + 1) * 35, 200), 400),
-    column_config={
-        "Region": st.column_config.TextColumn(
-            "Region",
-            width="medium"
-        ),
-        "Period": st.column_config.TextColumn(
-            "Period",
-            width="small"
-        ),
-        f"Average per {selected_view.split()[0]}": st.column_config.TextColumn(
-            f"Average per {selected_view.split()[0]}",
-            width="large"
-        ),
-        "Total Sales": st.column_config.TextColumn(
-            "Total Sales",
-            width="large"
-        )
-    }
-)
-
-# Add visual summary section
-st.markdown("""
-<style>
-.chart-section {
-    margin-top: 2rem;
-    padding: 1rem;
-    background-color: rgba(14, 17, 23, 0.2);
-    border-radius: 10px;
-    border: 2px solid rgba(230, 74, 25, 0.3);  /* Reddish-orange for border */
-}
-.chart-section:hover {
-    border-color: rgba(216, 67, 21, 0.6);  /* Deep reddish-orange for hover */
-    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);  /* Deep orange for shadow */
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="chart-section">', unsafe_allow_html=True)
-st.subheader("Visual Summary")
-
-if len(time_comparison) > 0:
-    # Create summary statistics first
-    summary_df = time_comparison.copy()
-    
-    # Get the "Average per Daily" values as numeric
-    summary_df['Daily Average'] = summary_df['Average per Daily'].apply(
-        lambda x: float(x.replace('$', '').replace(',', '').replace('M', '000000').replace('B', '000000000'))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Time Period",
+        yaxis_title=metric,
+        template=get_chart_template(),
+        height=500,
+        showlegend=True,
+        legend_title=region_col.capitalize(),
+        hovermode='x unified'
     )
     
-    # If no year is filtered, show averages by year
-    if selected_year == 'All Years':
-        # Calculate statistics for each region and year
-        stats = summary_df.groupby(['Region', 'Year']).agg({
-            'Daily Average': 'mean'
-        }).round(2).reset_index()
-        
-        stats = stats.sort_values(['Region', 'Year'])
-        
-        # Format currency values
-        stats['Daily Average Formatted'] = stats['Daily Average'].apply(lambda x: f"${x:,.2f}")
-        
-        # Display summary statistics grouped by region and year
-        st.markdown("### Average Daily Sales by Region and Year")
-        pivot_stats = stats.pivot(index='Region', columns='Year', values='Daily Average Formatted')
-        pivot_stats.columns = [f"Year {year}" for year in pivot_stats.columns]
-        pivot_stats = pivot_stats.reset_index()
-        
-        st.dataframe(
-            pivot_stats,
-            hide_index=True
-        )
-        
-        # Create visualization
-        fig = go.Figure()
-        
-        # Color scheme for years
-        year_colors = {
-            2007: '#ffd700',  # Gold
-            2008: '#ff5722',  # Orange
-            2009: '#c41e3a'   # Red
+    return fig
+
+# Load Data
+sales_df = load_sales_data()
+if sales_df is None:
+    st.error("Failed to load sales data. Please check the data file.")
+    st.stop()
+
+# Load GeoJSON
+geojson_data = load_geojson()
+if geojson_data is None:
+    st.error("Failed to load GeoJSON data. Please check the file.")
+    st.stop()
+
+# 1. Map Section with its own filters
+st.markdown("""<h2 class="table-header">🗺️ Sales Distribution Map</h2>""", unsafe_allow_html=True)
+
+# Map filters
+map_col1, map_col2 = st.columns(2)
+
+with map_col1:
+    available_continents = sorted(sales_df['continent'].unique())
+    selected_continent = st.selectbox(
+        "Select Continent",
+        ["All Continents"] + available_continents,
+        key="map_continent"
+    )
+
+with map_col2:
+    if selected_continent != "All Continents":
+        available_countries = sorted(sales_df[sales_df['continent'] == selected_continent]['country'].unique())
+    else:
+        available_countries = sorted(sales_df['country'].unique())
+    
+    selected_countries = st.multiselect(
+        "Select Countries",
+        options=["All Countries"] + available_countries,
+        default=None,
+        key="map_countries"
+    )
+
+# Add metric selector for map
+map_metric = st.radio(
+    "Select Map Metric",
+    ["Total Sales", "Average Sales"],
+    horizontal=True,
+    key="map_metric"
+)
+
+# Filter data for map and summary
+map_df = sales_df.copy()
+
+if selected_continent != "All Continents":
+    map_df = map_df[map_df['continent'] == selected_continent]
+if selected_countries and "All Countries" not in selected_countries:
+    map_df = map_df[map_df['country'].isin(selected_countries)]
+
+# Aggregate data for both map and summary
+map_aggregated_data = get_aggregated_data(map_df)
+metric_col = 'sales_sum' if map_metric == "Total Sales" else 'sales_mean'
+
+# Display map
+m = create_map(map_aggregated_data, geojson_data, metric=metric_col)
+if m is not None:
+    folium_static(m, width=1200)
+
+# 2. Summary Section
+st.markdown("""<h2 class="table-header">📊 Sales Summary</h2>""", unsafe_allow_html=True)
+
+if len(map_aggregated_data) > 0:
+    # Create summary based on selected filters
+    if selected_continent != "All Continents":
+        summary = map_aggregated_data.groupby('country').agg({
+            'sales_mean': 'mean',
+            'sales_sum': 'sum',
+            'sales_count': 'sum'
+        }).reset_index()
+        summary.columns = ['Country', 'Average Sales', 'Total Sales', 'Number of Sales']
+    else:
+        summary = map_aggregated_data.groupby('continent').agg({
+            'sales_mean': 'mean',
+            'sales_sum': 'sum',
+            'sales_count': 'sum'
+        }).reset_index()
+        summary.columns = ['Continent', 'Average Sales', 'Total Sales', 'Number of Sales']
+
+    summary['Average Sales'] = summary['Average Sales'].apply(format_currency)
+    summary['Total Sales'] = summary['Total Sales'].apply(format_currency)
+    summary['Number of Sales'] = summary['Number of Sales'].apply(lambda x: f"{x:,}")
+
+    # Display summary table
+    st.dataframe(
+        summary,
+        hide_index=True,
+        column_config={
+            "Country" if selected_continent != "All Continents" else "Continent": st.column_config.TextColumn("Region", width="medium"),
+            "Average Sales": st.column_config.TextColumn("Average Sales", width="large"),
+            "Total Sales": st.column_config.TextColumn("Total Sales", width="large"),
+            "Number of Sales": st.column_config.TextColumn("Number of Sales", width="medium")
         }
-        
-        # Add bars for each year
-        for year in sorted(stats['Year'].unique()):
-            year_data = stats[stats['Year'] == year]
-            
-            fig.add_trace(go.Bar(
-                y=year_data['Region'],
-                x=year_data['Daily Average'],
-                name=f'Year {year}',
-                orientation='h',
-                marker_color=year_colors.get(year),
-                text=[f"${x:,.2f}" for x in year_data['Daily Average']],
-                textposition='auto',
-            ))
-        
-        # Update layout for grouped bars
+    )
+
+    # Display KPIs with context
+    kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+
+    # Create context string for metrics
+    context = ""
+    if selected_continent != "All Continents":
+        context += f" in {selected_continent}"
+        if selected_countries and "All Countries" not in selected_countries:
+            country_list = ", ".join(selected_countries)
+            context += f" ({country_list})"
+
+    with kpi_col1:
+        st.metric(
+            f"Total Sales{context}",
+            format_currency(map_aggregated_data['sales_sum'].sum()),
+            help=f"Total sales across selected regions{context}"
+        )
+
+    with kpi_col2:
+        st.metric(
+            f"Average Sales{context}",
+            format_currency(map_aggregated_data['sales_mean'].mean()),
+            help=f"Average sales across selected regions{context}"
+        )
+
+    with kpi_col3:
+        region_type = "Countries" if selected_continent != "All Continents" else "Continents"
+        st.metric(
+            f"Number of {region_type}{context}",
+            str(len(map_aggregated_data)),
+            help=f"Number of {region_type.lower()} in the current selection"
+        )
+
+    # Bar Chart Visualization
+    st.markdown("""<h2 class="table-header">📊 Sales by Region</h2>""", unsafe_allow_html=True)
+    
+    # Add metric selector for bar chart
+    chart_metric = st.radio(
+        "Select Chart Metric",
+        ["Total Sales", "Average Sales"],
+        horizontal=True,
+        key="chart_metric"
+    )
+    
+    # Create bar chart title with context
+    chart_title = f"{chart_metric} by {'Country' if selected_continent != 'All Continents' else 'Continent'}"
+    if context:
+        chart_title += context
+    
+    # Create and display bar chart
+    bar_metric_col = 'sales_sum' if chart_metric == "Total Sales" else 'sales_mean'
+
+    # Determine which column to use for regions
+    region_col = 'country' if selected_continent != "All Continents" else 'continent'
+
+    fig = px.bar(
+        map_aggregated_data,
+        x=region_col,  # Use region_col which is either 'country' or 'continent'
+        y=bar_metric_col,
+        title=chart_title,
+        labels={
+            region_col: 'Region',  # Label it as Region in the display
+            bar_metric_col: chart_metric
+        },
+        color_discrete_sequence=['#DAA520'],  # Dark golden yellow
+        height=400
+    )
+
+    # Customize layout
+    fig.update_layout(
+        xaxis_title="Region",
+        yaxis_title=chart_metric,
+        plot_bgcolor='rgba(0,0,0,0)',  # Transparent background
+        paper_bgcolor='rgba(0,0,0,0)',  # Transparent surrounding
+        bargap=0.3,  # Adjust gap between bars
+        showlegend=False
+    )
+
+    # Format y-axis for currency values
+    if bar_metric_col in ['sales_sum', 'sales_mean']:
         fig.update_layout(
-            barmode='group',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            title=dict(
-                text=f"Average Daily Sales by Region and Year{' - ' + selected_month if selected_month != 'All Months' else ''}{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - ' + selected_quarter if selected_quarter != 'All Quarters' else ''}",
-                x=0.5,
-                xanchor='center',
-                font=dict(color='#ff5722')
-            ),
-            xaxis=dict(
-                title='Average Daily Sales ($)',
-                gridcolor='rgba(255, 215, 0, 0.1)',
-                showgrid=True,
-                title_font=dict(color='#ffd700'),
-                tickfont=dict(color='#ffd700'),
-                tickformat='$,.0f'
-            ),
             yaxis=dict(
-                title='Region',
-                showgrid=False,
-                automargin=True,
-                title_font=dict(color='#ffd700'),
-                tickfont=dict(color='#ffd700')
-            ),
-            font=dict(color='#ffd700'),
-            showlegend=True,
-            legend=dict(
-                title='',
-                yanchor="top",
-                y=0.99,
-                xanchor="right",
-                x=0.99,
-                font=dict(color='#ffd700')
-            ),
-            margin=dict(l=20, r=20, t=40, b=20),
-            height=max(len(stats['Region'].unique()) * 100, 400)
+                tickformat="$,.0f",
+                gridcolor='rgba(128,128,128,0.1)'  # Light grid lines
+            )
         )
     else:
-        # If year is filtered, show single-year view
-        stats = summary_df.groupby('Region').agg({
-            'Daily Average': 'mean'
-        }).round(2).reset_index()
-        
-        stats = stats.sort_values('Daily Average', ascending=False)
-        stats['Daily Average Formatted'] = stats['Daily Average'].apply(lambda x: f"${x:,.2f}")
-        
-        # Display summary statistics
-        st.markdown(f"### Average Daily Sales by Region - Year {selected_year}")
-        st.dataframe(
-            stats[['Region', 'Daily Average Formatted']].rename(columns={'Daily Average Formatted': 'Average Daily Sales'}),
-            hide_index=True
-        )
-        
-        # Create visualization for single year
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            y=stats['Region'],
-            x=stats['Daily Average'],
-            orientation='h',
-            marker_color='#ffd700',
-            text=[f"${x:,.2f}" for x in stats['Daily Average']],
-            textposition='auto',
-        ))
-        
-        # Update layout for single year view
         fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            title=dict(
-                text=f"Average Daily Sales by Region - Year {selected_year}{' - ' + selected_month if selected_month != 'All Months' else ''}{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - ' + selected_quarter if selected_quarter != 'All Quarters' else ''}",
-                x=0.5,
-                xanchor='center',
-                font=dict(color='#ff5722')
-            ),
-            xaxis=dict(
-                title='Average Daily Sales ($)',
-                gridcolor='rgba(255, 215, 0, 0.1)',
-                showgrid=True,
-                title_font=dict(color='#ffd700'),
-                tickfont=dict(color='#ffd700'),
-                tickformat='$,.0f'
-            ),
             yaxis=dict(
-                title='Region',
-                showgrid=False,
-                automargin=True,
-                title_font=dict(color='#ffd700'),
-                tickfont=dict(color='#ffd700')
-            ),
-            font=dict(color='#ffd700'),
-            showlegend=False,
-            margin=dict(l=20, r=20, t=40, b=20),
-            height=max(len(stats) * 50, 400)
+                tickformat=",d",
+                gridcolor='rgba(128,128,128,0.1)'  # Light grid lines
+            )
         )
 
-    # Add hover template
-    fig.update_traces(
-        hovertemplate="<br>".join([
-            "Region: %{y}",
-            "Average Daily Sales: %{text}",
-            "<extra></extra>"
-        ])
+    # Update x-axis style
+    fig.update_xaxes(
+        gridcolor='rgba(128,128,128,0.1)',  # Light grid lines
+        tickangle=45  # Angle the labels for better readability
     )
 
-    # Add some spacing between table and chart
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Display the chart
     st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("No data available to visualize for the selected filters.")
 
-st.markdown('</div>', unsafe_allow_html=True) 
+    # Time Analysis Section
+    st.markdown("""<h2 class="table-header">📊 Time Series Analysis</h2>""", unsafe_allow_html=True)
+
+    # Metric selection
+    metric_options = {
+        'sales_sum': 'Total Sales',
+        'sales_mean': 'Average Sales',
+        'sales_count': 'Number of Sales'
+    }
+    selected_metric = st.selectbox(
+        "Select Metric",
+        options=list(metric_options.keys()),
+        format_func=lambda x: metric_options[x],
+        key="time_metric"
+    )
+    time_metric = metric_options[selected_metric]
+
+    # Start with data filtered by continent and country selections
+    time_df = map_df.copy()
+    if selected_continent != "All Continents":
+        time_df = time_df[time_df['continent'] == selected_continent]
+    if selected_countries and "All Countries" not in selected_countries:
+        time_df = time_df[time_df['country'].isin(selected_countries)]
+
+    # Calculate quarter from DateKey
+    time_df['quarter'] = time_df['DateKey'].dt.quarter
+
+    # Time filters in a single row
+    time_col1, time_col2, time_col3, time_col4 = st.columns(4)
+
+    # Year selection
+    with time_col1:
+        available_years = sorted(time_df['year'].unique())
+        selected_year = st.selectbox(
+            "Year",
+            options=["All Years"] + available_years,
+            key="time_year"
+        )
+
+    # Filter data by year if selected
+    year_df = time_df
+    if selected_year != "All Years":
+        year_df = time_df[time_df['year'] == int(selected_year)]
+
+    # Quarter selection
+    with time_col2:
+        available_quarters = sorted(year_df['quarter'].unique())
+        selected_quarter = st.selectbox(
+            "Quarter",
+            options=["All Quarters"] + [f"Q{q}" for q in available_quarters],
+            key="time_quarter"
+        )
+
+    # Filter data by quarter if selected and get available months
+    quarter_df = year_df
+    if selected_quarter != "All Quarters":
+        quarter_num = int(selected_quarter[1])
+        quarter_df = year_df[year_df['quarter'] == quarter_num]
+        # Get months for this quarter
+        quarter_months = {
+            1: [1, 2, 3],
+            2: [4, 5, 6],
+            3: [7, 8, 9],
+            4: [10, 11, 12]
+        }
+        available_months = sorted(set(quarter_df['month'].unique()) & set(quarter_months[quarter_num]))
+    else:
+        available_months = sorted(quarter_df['month'].unique())
+
+    # Month selection
+    with time_col3:
+        selected_month = st.selectbox(
+            "Month",
+            options=["All Months"] + [calendar.month_abbr[m] for m in available_months],
+            key="time_month"
+        )
+
+    # Filter data by month if selected and get available weeks
+    month_df = quarter_df
+    if selected_month != "All Months":
+        month_num = list(calendar.month_abbr).index(selected_month)
+        month_df = quarter_df[quarter_df['month'] == month_num]
+        available_weeks = sorted(month_df['week'].unique())
+    else:
+        available_weeks = sorted(quarter_df['week'].unique())
+
+    # Week selection
+    with time_col4:
+        selected_week = st.selectbox(
+            "Week",
+            options=["All Weeks"] + [f"Week {w}" for w in available_weeks],
+            key="time_week"
+        )
+
+    # Final filtering based on week selection
+    if selected_week != "All Weeks":
+        week_num = int(selected_week.split()[1])
+        time_df = month_df[month_df['week'] == week_num]
+    elif selected_month != "All Months":
+        month_num = list(calendar.month_abbr).index(selected_month)
+        time_df = quarter_df[quarter_df['month'] == month_num]
+    elif selected_quarter != "All Quarters":
+        time_df = quarter_df
+    elif selected_year != "All Years":
+        time_df = year_df
+
+    # Only proceed with visualization if we have data
+    if len(time_df) > 0:
+        # Determine x-axis based on selections
+        if selected_week != "All Weeks":
+            x_col = 'week'
+            time_format = lambda x: f"Week {int(x)}"
+            title_period = f"Week {week_num}"
+        elif selected_month != "All Months":
+            x_col = 'month'
+            time_format = lambda x: calendar.month_abbr[int(x)]
+            title_period = selected_month
+        elif selected_quarter != "All Quarters":
+            x_col = 'quarter'
+            time_format = lambda x: f"Q{int(x)}"
+            title_period = selected_quarter
+        else:
+            x_col = 'year'
+            time_format = lambda x: str(int(x))
+            title_period = "Year"
+
+        # Get unique regions
+        regions = sorted(time_df[region_col].unique())
+
+        # Create a visualization for each region
+        for region in regions:
+            # Filter data for the current region
+            region_df = time_df[time_df[region_col] == region]
+            
+            # Prepare data for visualization
+            if selected_year != "All Years":
+                # If specific year selected, show only that year's data
+                groupby_cols = [x_col]
+                title_year = f" ({selected_year})"
+            else:
+                # If all years, include year in grouping
+                groupby_cols = ['year', x_col] if x_col != 'year' else ['year']
+                title_year = ""
+
+            # Aggregate data
+            region_summary = region_df.groupby(groupby_cols).agg({
+                'sales': ['mean', 'sum', 'count']
+            }).reset_index()
+
+            # Flatten column names
+            if len(groupby_cols) > 1:
+                region_summary.columns = groupby_cols + ['sales_mean', 'sales_sum', 'sales_count']
+            else:
+                region_summary.columns = [groupby_cols[0], 'sales_mean', 'sales_sum', 'sales_count']
+
+            # Create x-axis labels
+            if selected_year == "All Years" and x_col != 'year':
+                region_summary['x_label'] = region_summary.apply(
+                    lambda row: f"Y{int(row['year'])}-{time_format(row[x_col])}", axis=1
+                )
+            else:
+                region_summary['x_label'] = region_summary[x_col].apply(time_format)
+
+            # Create bar chart for the region
+            fig = px.bar(
+                region_summary,
+                x='x_label',
+                y=selected_metric,
+                title=f"{time_metric} by {title_period} for {region}{title_year}",
+                labels={
+                    'x_label': title_period,
+                    selected_metric: time_metric
+                },
+                color_discrete_sequence=['#DAA520'],  # Dark golden yellow
+                height=400
+            )
+
+            # Customize layout
+            fig.update_layout(
+                xaxis_title=title_period,
+                yaxis_title=time_metric,
+                plot_bgcolor='rgba(0,0,0,0)',  # Transparent background
+                paper_bgcolor='rgba(0,0,0,0)',  # Transparent surrounding
+                bargap=0.3,  # Adjust gap between bars
+                showlegend=False
+            )
+
+            # Format y-axis for currency values
+            if selected_metric in ['sales_sum', 'sales_mean']:
+                fig.update_layout(
+                    yaxis=dict(
+                        tickformat="$,.0f",
+                        gridcolor='rgba(128,128,128,0.1)'  # Light grid lines
+                    )
+                )
+            else:
+                fig.update_layout(
+                    yaxis=dict(
+                        tickformat=",d",
+                        gridcolor='rgba(128,128,128,0.1)'  # Light grid lines
+                    )
+                )
+
+            # Update x-axis style
+            fig.update_xaxes(
+                gridcolor='rgba(128,128,128,0.1)',  # Light grid lines
+                tickangle=45 if len(region_summary) > 6 else 0  # Angle labels only if many bars
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("No data available for the selected filters.") 
