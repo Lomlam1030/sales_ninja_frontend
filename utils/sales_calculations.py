@@ -11,7 +11,7 @@ def load_dashboard_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
         Tuple[pd.DataFrame, pd.DataFrame]: Tuple containing (actual_data, predicted_data)
     """
     # Load actual data
-    df_actual = pd.read_csv('data/data_dashboard_merged.csv')
+    df_actual = pd.read_csv('data/data_dashboard_final.csv')
     
     # Load predicted data
     df_predicted = pd.read_csv('data/synthetic_predicted_sales_2007_2010.csv')

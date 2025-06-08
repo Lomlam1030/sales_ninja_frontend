@@ -1,13 +1,9 @@
 import streamlit as st
-import plotly.express as px
 import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
 import folium
 from streamlit_folium import folium_static
 import json
 import branca.colormap as cm
-import requests
 from pathlib import Path
 from utils.page_config import set_page_config, add_page_title
 
@@ -21,6 +17,77 @@ add_page_title(
     emoji="🌍"
 )
 
+@st.cache_data
+def load_geojson():
+    """Load GeoJSON data for the world map"""
+    try:
+        with open('data/world-countries.json') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Error loading GeoJSON data: {str(e)}")
+        return None
+
+def aggregate_by_period(df, freq='D'):
+    """
+    Aggregate sales data by the specified frequency.
+    Returns the average sales per period (day/month/quarter) for each country.
+    """
+    df = df.copy()
+    
+    if freq == 'D':
+        # Daily average - first get total sales per day per country
+        daily_totals = df.groupby(['DateKey', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        # Then get the average daily sales for each country
+        return daily_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
+            
+    elif freq == 'M':
+        # Monthly average
+        df['year_month'] = df['DateKey'].dt.to_period('M')
+        monthly_totals = df.groupby(['year_month', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        return monthly_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
+            
+    else:  # 'Q'
+        # Quarterly average
+        df['year_quarter'] = df['DateKey'].dt.to_period('Q')
+        quarterly_totals = df.groupby(['year_quarter', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        return quarterly_totals.groupby(['country_geojson', 'country', 'continent'])['net_sales'].mean().reset_index()
+
+def aggregate_by_period_with_totals(df, freq='D'):
+    """
+    Aggregate sales data by the specified frequency.
+    Returns both average and total sales per period for each country.
+    """
+    df = df.copy()
+    
+    if freq == 'D':
+        # Daily aggregation
+        daily_totals = df.groupby(['DateKey', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        result = daily_totals.groupby(['country_geojson', 'country', 'continent']).agg({
+            'net_sales': ['mean', 'sum']
+        }).reset_index()
+        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
+        return result
+            
+    elif freq == 'M':
+        # Monthly aggregation
+        df['year_month'] = df['DateKey'].dt.to_period('M')
+        monthly_totals = df.groupby(['year_month', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        result = monthly_totals.groupby(['country_geojson', 'country', 'continent']).agg({
+            'net_sales': ['mean', 'sum']
+        }).reset_index()
+        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
+        return result
+            
+    else:  # 'Q'
+        # Quarterly aggregation
+        df['year_quarter'] = df['DateKey'].dt.to_period('Q')
+        quarterly_totals = df.groupby(['year_quarter', 'country_geojson', 'country', 'continent'])['net_sales'].sum().reset_index()
+        result = quarterly_totals.groupby(['country_geojson', 'country', 'continent']).agg({
+            'net_sales': ['mean', 'sum']
+        }).reset_index()
+        result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
+        return result
+
 # Custom color scheme matching the dashboard
 COLORS = {
     'primary': '#2ecc71',    # Green from the dashboard
@@ -31,42 +98,111 @@ COLORS = {
 }
 
 @st.cache_data
+def get_country_name_mapping():
+    """Return mapping of country names to GeoJSON country names"""
+    return {
+        'United States': 'United States of America',
+        'UK': 'United Kingdom',
+        'United Kingdom': 'United Kingdom',
+        'Germany': 'Germany',
+        'Germany ': 'Germany',
+        'France': 'France',
+        'Australia': 'Australia',
+        'Canada': 'Canada',
+        'Mexico': 'Mexico',
+        'Brazil': 'Brazil',
+        'Spain': 'Spain',
+        'Italy': 'Italy',
+        'Italy ': 'Italy',
+        'Netherlands': 'Netherlands',
+        'the Netherlands': 'Netherlands',
+        'Belgium': 'Belgium',
+        'Switzerland': 'Switzerland',
+        'Austria': 'Austria',
+        'Sweden': 'Sweden',
+        'Sweden ': 'Sweden',
+        'Norway': 'Norway',
+        'Denmark': 'Denmark',
+        'Denmark ': 'Denmark',
+        'Finland': 'Finland',
+        'Japan': 'Japan',
+        'China': 'China',
+        'India': 'India',
+        'South Korea': 'Korea, Republic of',
+        'Singapore': 'Singapore',
+        'New Zealand': 'New Zealand',
+        'Bhutan': 'Bhutan',
+        'Russia': 'Russia',
+        'Taiwan': 'Taiwan',
+        'Syria': 'Syria',
+        'Kyrgyzstan': 'Kyrgyzstan',
+        'Iran': 'Iran',
+        'Ireland': 'Ireland',
+        'Ireland ': 'Ireland',
+        'Slovenia': 'Slovenia',
+        'Thailand': 'Thailand',
+        'Turkmenistan': 'Turkmenistan',
+        'Romania': 'Romania',
+        'Romania ': 'Romania',
+        'Portugal': 'Portugal',
+        'Pakistan': 'Pakistan',
+        'Armenia': 'Armenia',
+        'Greece': 'Greece',
+        'Greece ': 'Greece',
+        'Malta': 'Malta',
+        'Poland': 'Poland',
+        'Poland ': 'Poland'
+    }
+
+@st.cache_data
 def load_sales_data():
     """Load and prepare sales data from CSV"""
     try:
-        # Load the data
-        df = pd.read_csv('data/data_dashboard_merged.csv')
+        file_path = 'data/data_dashboard_final.csv'
+        if not Path(file_path).exists():
+            st.error(f"Data file not found at: {file_path}")
+            return None
+
+        df = pd.read_csv(file_path, usecols=[
+            'DateKey', 'SalesAmount', 'CalendarYear', 'CalendarQuarterLabel',
+            'CalendarMonthLabel', 'ContinentName', 'RegionCountryName'
+        ])
         
-        # Convert DateKey to datetime and extract year
         df['DateKey'] = pd.to_datetime(df['DateKey'])
         df['year'] = df['DateKey'].dt.year
         
+        # Clean country names by trimming whitespace
+        df['RegionCountryName'] = df['RegionCountryName'].str.strip()
+        
+        # Get country name mapping
+        country_mapping = get_country_name_mapping()
+        
+        # Map country names to GeoJSON country names
+        df['country_geojson'] = df['RegionCountryName'].map(country_mapping)
+        
+        # Log unmapped countries
+        unmapped_countries = df[df['country_geojson'].isna()]['RegionCountryName'].unique()
+        if len(unmapped_countries) > 0:
+            st.warning(f"Some countries could not be mapped: {', '.join(sorted(unmapped_countries))}")
+        
+        # Remove rows with unmapped countries
+        df = df[df['country_geojson'].notna()]
+        
+        if len(df) == 0:
+            st.error("No data available after mapping countries. Please check the country mapping.")
+            return None
+        
         # Rename columns to match our expected format
         df = df.rename(columns={
-            'CountryName': 'country',
+            'RegionCountryName': 'country',
             'ContinentName': 'continent',
-            'NetSales': 'net_sales'
+            'SalesAmount': 'net_sales'
         })
         
         return df
         
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
-        return None
-
-@st.cache_data
-def get_geojson_data():
-    """Get GeoJSON data - will be replaced with API call in production"""
-    try:
-        url = "https://raw.githubusercontent.com/python-visualization/folium/master/examples/data/world-countries.json"
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            st.error("Failed to load GeoJSON data")
-            return None
-    except Exception as e:
-        st.error(f"Error loading GeoJSON data: {str(e)}")
         return None
 
 # Load the data
@@ -78,131 +214,7 @@ if sales_df is None:
     st.error("Failed to load sales data. Please check the data file.")
     st.stop()
 
-geo_data = get_geojson_data()
-
-# Sidebar filters
-with st.sidebar:
-    st.markdown(f"""
-    <style>
-    .sidebar-title {{
-        font-size: 24px;
-        font-weight: bold;
-        color: {COLORS['primary']};
-        margin-bottom: 20px;
-    }}
-    .filter-section {{
-        background-color: rgba(46, 204, 113, 0.1);
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<p class="sidebar-title">Filters</p>', unsafe_allow_html=True)
-    
-    # Year selection
-    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-    st.subheader("📅 Year")
-    
-    # Get unique years from the actual data
-    available_years = sorted(sales_df['year'].astype(int).unique(), reverse=True)
-    
-    # Default to the most recent year
-    default_year = max(available_years)
-    
-    # Year multiselect with default to most recent year
-    selected_years = st.multiselect(
-        "Select Years",
-        options=available_years,
-        default=[default_year],
-        key="year_selector",
-        help="Select one or more years to view data for. Defaults to the most recent year."
-    )
-    
-    # If no years selected, use the most recent year
-    if not selected_years:
-        selected_years = [default_year]
-        st.info(f"No year selected. Showing data for {default_year}.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Continent selection
-    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-    st.subheader("🌍 Geography")
-    
-    # Filter continents based on selected years
-    available_continents = sorted(sales_df[sales_df['year'].isin(selected_years)]['continent'].unique())
-    selected_continent = st.selectbox(
-        "Select Continent",
-        options=available_continents,
-        key="continent_selector"
-    )
-    
-    # Country selection based on continent and selected years
-    available_countries = sorted(
-        sales_df[
-            (sales_df['continent'] == selected_continent) & 
-            (sales_df['year'].isin(selected_years))
-        ]['country'].unique()
-    )
-    
-    # Default to top 5 countries by sales for the selected continent and years
-    default_countries = (
-        sales_df[
-            (sales_df['continent'] == selected_continent) & 
-            (sales_df['year'].isin(selected_years))
-        ]
-        .groupby('country')['net_sales']
-        .sum()
-        .sort_values(ascending=False)
-        .head(5)
-        .index
-        .tolist()
-    )
-    
-    selected_countries = st.multiselect(
-        "Select Countries",
-        options=available_countries,
-        default=default_countries,
-        key="country_selector",
-        help="Select countries to view data for. Defaults to top 5 countries by sales."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# Filter data based on selections
-filtered_df = sales_df[
-    (sales_df['year'].isin(selected_years)) &
-    (sales_df['country'].isin(selected_countries))
-]
-
-# Create tabs for different views
-tab1, tab2, tab3 = st.tabs(["Daily View", "Monthly View", "Quarterly View"])
-
-def aggregate_by_period(df, freq='D'):
-    """Aggregate sales data by the specified frequency"""
-    df = df.copy()
-    if freq == 'D':
-        return df
-    
-    # For monthly and quarterly views, we'll take the average per period
-    if freq == 'M':
-        # Monthly average
-        return df.groupby(['country', 'continent', 'year', df['DateKey'].dt.month])['net_sales'].mean().reset_index()
-    else:  # 'Q'
-        # Quarterly average
-        return df.groupby(['country', 'continent', 'year', df['DateKey'].dt.quarter])['net_sales'].mean().reset_index()
-
-# Get the appropriate view based on selected tab
-if tab1.active:
-    display_df = filtered_df
-    period_label = "Daily"
-elif tab2.active:
-    display_df = aggregate_by_period(filtered_df, 'M')
-    period_label = "Monthly Average"
-else:
-    display_df = aggregate_by_period(filtered_df, 'Q')
-    period_label = "Quarterly Average"
+geo_data = load_geojson()
 
 # Main content styling
 st.markdown("""
@@ -236,7 +248,7 @@ st.markdown("""
 }
 .folium-map {
     width: 100% !important;
-    height: 500px !important;  /* Match the height of the Home page graph */
+    height: 500px !important;
 }
 [data-testid="stVerticalBlock"] {
     gap: 0 !important;
@@ -244,37 +256,60 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Map section - use full width
+# Create radio buttons for view selection
+view_options = ["Daily View", "Monthly View", "Quarterly View"]
+selected_view = st.radio("Select View", view_options, horizontal=True)
+
+# Get the appropriate view based on selection
+if selected_view == "Daily View":
+    display_df = aggregate_by_period(sales_df, 'D')
+    table_df = aggregate_by_period_with_totals(sales_df, 'D')
+    period_label = "Day"
+elif selected_view == "Monthly View":
+    display_df = aggregate_by_period(sales_df, 'M')
+    table_df = aggregate_by_period_with_totals(sales_df, 'M')
+    period_label = "Month"
+else:  # Quarterly View
+    display_df = aggregate_by_period(sales_df, 'Q')
+    table_df = aggregate_by_period_with_totals(sales_df, 'Q')
+    period_label = "Quarter"
+
+# Debug information in sidebar
+st.sidebar.write("Current view:", period_label)
+st.sidebar.write("Number of records:", len(display_df))
+if len(display_df) > 0:
+    st.sidebar.write("Sample values:", display_df['net_sales'].head())
+
+# Map section
 st.markdown('<div class="map-section">', unsafe_allow_html=True)
 
-# Add section header with proper styling
-st.markdown("""
+# Add section header
+st.markdown(f"""
 <style>
-.section-header {
+.section-header {{
     color: #2ecc71;
     font-size: 24px;
     font-weight: bold;
     margin-bottom: 20px;
     padding-left: 10px;
     border-left: 4px solid #2ecc71;
-}
+}}
 </style>
-<h2 class="section-header">📍 Geographic Sales Distribution</h2>
+<h2 class="section-header">📍 Geographic Sales Distribution (per {period_label})</h2>
 """, unsafe_allow_html=True)
 
-# Create the map
 if geo_data:
     # Create a base map
     m = folium.Map(
         location=[30, 0],
         zoom_start=2,
-        tiles='cartodbdark_matter',  # Dark theme map
+        tiles='cartodbdark_matter',
         min_zoom=2,
         max_zoom=6
     )
     
-    # Calculate sales by country for the selected years
-    country_sales = display_df.groupby(['country', 'continent'])['net_sales'].sum().reset_index()
+    # Use display_df directly since it's already aggregated properly
+    country_sales = display_df
     
     # Create color scale
     min_sales = country_sales['net_sales'].min()
@@ -286,36 +321,36 @@ if geo_data:
         vmax=max_sales
     )
     
-    # Format sales values and add them to the GeoJSON properties
+    # Format sales values for GeoJSON
     for feature in geo_data['features']:
         country_name = feature['properties']['name']
-        country_data = country_sales[country_sales['country'] == country_name]
+        country_data = country_sales[country_sales['country_geojson'] == country_name]
         if not country_data.empty:
             sales_value = country_data['net_sales'].values[0]
             continent = country_data['continent'].values[0]
             if sales_value >= 1e9:
-                formatted_sales = f"${sales_value/1e9:.1f}B"
+                formatted_sales = f"${sales_value/1e9:.2f}B"
             elif sales_value >= 1e6:
-                formatted_sales = f"${sales_value/1e6:.1f}M"
+                formatted_sales = f"${sales_value/1e6:.2f}M"
             else:
-                formatted_sales = f"${sales_value:,.0f}"
-            feature['properties']['formatted_sales'] = formatted_sales
+                formatted_sales = f"${sales_value:,.2f}"
+            feature['properties']['formatted_sales'] = f"{formatted_sales} per {period_label.lower()}"
             feature['properties']['continent'] = continent
         else:
             feature['properties']['formatted_sales'] = "No data"
             feature['properties']['continent'] = "N/A"
-    
-    # Add the choropleth layer
+
+    # Add choropleth layer
     choropleth = folium.Choropleth(
         geo_data=geo_data,
         name='choropleth',
         data=country_sales,
-        columns=['country', 'net_sales'],
+        columns=['country_geojson', 'net_sales'],
         key_on='feature.properties.name',
         fill_color='YlOrRd',
         fill_opacity=0.7,
         line_opacity=0.2,
-        legend_name=f'Net Sales ({period_label})',
+        legend_name=f'Average Net Sales per {period_label}',
         smooth_factor=0
     ).add_to(m)
     
@@ -348,38 +383,132 @@ if geo_data:
     m.add_child(NIL)
     m.keep_in_front(NIL)
     
-    # Add the map to Streamlit with proper container styling
+    # Add the map to Streamlit
     st.markdown('<div class="map-container">', unsafe_allow_html=True)
-    folium_static(m, width=None)  # Let the container control the width
+    folium_static(m, width=None)
     st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.error("Unable to load map data. Please try again later.")
 
-st.markdown('</div>', unsafe_allow_html=True)  # Close map-section div
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Add table section after the map
+st.markdown("""
+<style>
+.table-header {
+    color: #2ecc71;
+    font-size: 24px;
+    font-weight: bold;
+    margin: 30px 0 20px 0;
+    padding-left: 10px;
+    border-left: 4px solid #2ecc71;
+}
+.stDataFrame {
+    font-size: 16px !important;
+}
+[data-testid="stDataFrameResizable"] {
+    background-color: rgba(46, 204, 113, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+[data-testid="stDataFrameResizable"] td {
+    background-color: transparent !important;
+}
+[data-testid="stDataFrameResizable"] th {
+    background-color: rgba(46, 204, 113, 0.1) !important;
+    color: #2ecc71 !important;
+}
+</style>
+<h2 class="table-header">📊 Sales by Country</h2>
+""", unsafe_allow_html=True)
+
+# Prepare the table data
+table_data = table_df.copy()
+table_data = table_data.sort_values('avg_sales', ascending=False)
+
+# Format the sales columns
+def format_currency(value):
+    if value >= 1e9:
+        return f"${value/1e9:.2f}B"
+    elif value >= 1e6:
+        return f"${value/1e6:.2f}M"
+    else:
+        return f"${value:,.2f}"
+
+table_data['Average Sales'] = table_data['avg_sales'].apply(format_currency)
+table_data['Total Sales'] = table_data['total_sales'].apply(format_currency)
+
+# Prepare final table with selected columns and renamed
+final_table = table_data[[
+    'country', 
+    'continent', 
+    'Average Sales',
+    'Total Sales'
+]].rename(columns={
+    'country': 'Country',
+    'continent': 'Continent'
+})
+
+# Add period information to column headers
+final_table = final_table.rename(columns={
+    'Average Sales': f'Average Sales per {period_label}',
+    'Total Sales': f'Total Sales (All {period_label}s)'
+})
+
+# Display the table with custom formatting
+st.dataframe(
+    final_table,
+    hide_index=True,
+    column_config={
+        "Country": st.column_config.TextColumn(
+            "Country",
+            width="medium"
+        ),
+        "Continent": st.column_config.TextColumn(
+            "Continent",
+            width="medium"
+        ),
+        f"Average Sales per {period_label}": st.column_config.TextColumn(
+            f"Average Sales per {period_label}",
+            width="large"
+        ),
+        f"Total Sales (All {period_label}s)": st.column_config.TextColumn(
+            f"Total Sales (All {period_label}s)",
+            width="large"
+        )
+    }
+)
 
 # Display metrics with proper formatting
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    total_sales = display_df['net_sales'].sum()
-    formatted_total = f"${total_sales:,.0f}" if total_sales < 1e9 else f"${total_sales/1e9:.1f}B"
+    avg_total_sales = display_df['net_sales'].mean()
+    formatted_total = f"${avg_total_sales/1e9:.2f}B" if avg_total_sales >= 1e9 else (
+        f"${avg_total_sales/1e6:.2f}M" if avg_total_sales >= 1e6 else f"${avg_total_sales:,.2f}"
+    )
     st.metric(
-        "Total Net Sales",
+        f"Average Net Sales per {period_label}",
         formatted_total
     )
 
 with col2:
-    avg_sales = display_df['net_sales'].mean()
-    formatted_avg = f"${avg_sales:,.0f}" if avg_sales < 1e9 else f"${avg_sales/1e9:.1f}B"
+    num_countries = len(display_df['country'].unique())
     st.metric(
-        f"Average Sales per Country",
-        formatted_avg
+        "Number of Countries",
+        f"{num_countries:,}"
     )
 
 with col3:
-    top_country_data = display_df.groupby('country')['net_sales'].sum().sort_values(ascending=False).head(1)
-    top_country = top_country_data.index[0]
+    top_country_data = display_df.nlargest(1, 'net_sales')
+    top_country = top_country_data['country'].iloc[0]
+    top_sales = top_country_data['net_sales'].iloc[0]
+    formatted_top = f"${top_sales/1e9:.2f}B" if top_sales >= 1e9 else (
+        f"${top_sales/1e6:.2f}M" if top_sales >= 1e6 else f"${top_sales:,.2f}"
+    )
     st.metric(
-        "Top Performing Country",
-        top_country
+        f"Top Country (per {period_label})",
+        f"{top_country}",
+        f"{formatted_top}"
     ) 
