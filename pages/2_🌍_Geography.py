@@ -6,18 +6,41 @@ import json
 import branca.colormap as cm
 from pathlib import Path
 from utils.page_config import set_page_config, add_page_title
+from utils.theme import COLORS, CHART_COLORS, get_chart_template, get_css
 import plotly.express as px
 import plotly.graph_objects as go
 
 # Configure the page
 set_page_config(title="Geography")
 
-# Add the styled title
+# Add the styled title and CSS
+st.markdown(get_css(), unsafe_allow_html=True)
 add_page_title(
     title="Geographic Sales Distribution",
     subtitle="Global Sales Performance by Region",
     emoji="🌍"
 )
+
+def get_weeks_for_month(df, month):
+    """Get the weeks that fall within a specific month"""
+    if month == "All Months":
+        return sorted(df['DateKey'].dt.isocalendar().week.unique())
+    
+    month_num = int(month)
+    month_data = df[df['DateKey'].dt.month == month_num]
+    return sorted(month_data['DateKey'].dt.isocalendar().week.unique())
+
+def get_month_for_week(df, week_num):
+    """Get the month that contains the given week"""
+    if week_num == "All Weeks":
+        return "All Months"
+    
+    week = int(week_num.split()[1])
+    week_data = df[df['DateKey'].dt.isocalendar().week == week]
+    if len(week_data) > 0:
+        month = week_data.iloc[0]['DateKey'].month
+        return f"{month:02d}"
+    return "All Months"
 
 @st.cache_data
 def load_geojson():
@@ -89,15 +112,6 @@ def aggregate_by_period_with_totals(df, freq='D'):
         }).reset_index()
         result.columns = ['country_geojson', 'country', 'continent', 'avg_sales', 'total_sales']
         return result
-
-# Custom color scheme matching the dashboard
-COLORS = {
-    'primary': '#2ecc71',    # Green from the dashboard
-    'secondary': '#3498db',  # Blue from the dashboard
-    'background': '#0e1117', # Dark background
-    'text': '#fafafa',      # Light text
-    'accent': '#95a5a6'     # Subtle accent
-}
 
 @st.cache_data
 def get_country_name_mapping():
@@ -263,18 +277,18 @@ view_options = ["Daily View", "Monthly View", "Quarterly View"]
 selected_view = st.radio("Select View", view_options, horizontal=True)
 
 # Get the appropriate view based on selection
+period_label = "Day" if selected_view == "Daily View" else "Month" if selected_view == "Monthly View" else "Quarter"
+
+# Get the appropriate view based on selection
 if selected_view == "Daily View":
     display_df = aggregate_by_period(sales_df, 'D')
     table_df = aggregate_by_period_with_totals(sales_df, 'D')
-    period_label = "Day"
 elif selected_view == "Monthly View":
     display_df = aggregate_by_period(sales_df, 'M')
     table_df = aggregate_by_period_with_totals(sales_df, 'M')
-    period_label = "Month"
 else:  # Quarterly View
     display_df = aggregate_by_period(sales_df, 'Q')
     table_df = aggregate_by_period_with_totals(sales_df, 'Q')
-    period_label = "Quarter"
 
 # Debug information in sidebar
 st.sidebar.write("Current view:", period_label)
@@ -452,7 +466,7 @@ selected_continent = col1.selectbox(
 # Apply continent filter and get available countries
 if selected_continent != "All Continents":
     filtered_data = filtered_data[filtered_data['continent'] == selected_continent]
-
+    
 # Get available countries based on current filter
 available_countries = sorted(filtered_data['country'].unique())
 selected_countries = col2.multiselect(
@@ -509,11 +523,11 @@ st.dataframe(
     hide_index=True,
     height=height,
     column_config={
-        "Continent": st.column_config.TextColumn(
+        "continent": st.column_config.TextColumn(
             "Continent",
             width="medium"
         ),
-        "Country": st.column_config.TextColumn(
+        "country": st.column_config.TextColumn(
             "Country",
             width="medium"
         ),
@@ -606,8 +620,8 @@ st.markdown("""
 <h2 class="table-header">📊 Sales Comparison</h2>
 """, unsafe_allow_html=True)
 
-# Prepare data for bar chart based on filters
 def prepare_bar_chart_data(data, continent_filter, country_filters):
+    """Prepare data for bar chart based on filters"""
     if country_filters:
         # Show selected countries
         chart_data = data[data['country'].isin(country_filters)].copy()
@@ -628,67 +642,64 @@ def prepare_bar_chart_data(data, continent_filter, country_filters):
     agg_data = chart_data.groupby(group_by)['avg_sales'].mean().reset_index()
     agg_data = agg_data.sort_values('avg_sales', ascending=True)  # Sort for better visualization
     
-    return agg_data, title, group_by
+    # Create bar chart
+    fig = go.Figure()
+    
+    # Add bars
+    fig.add_trace(go.Bar(
+        x=agg_data['avg_sales'],
+        y=agg_data[group_by],
+        orientation='h',
+        marker_color='#2ecc71',
+        text=[f"${x:,.2f}" for x in agg_data['avg_sales']],  # Format as currency
+        textposition='auto',
+    ))
+    
+    # Update layout
+    fig.update_layout(
+        title=dict(
+            text=title,
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis_title="Average Sales ($)",
+        yaxis_title=group_by.title(),
+        height=max(len(agg_data) * 50, 400),  # Dynamic height based on number of bars
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#2ecc71'),
+        showlegend=False,
+        margin=dict(l=20, r=20, t=40, b=20),
+        xaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(46, 204, 113, 0.1)',
+            tickformat="$,.2f"  # Format as currency
+        ),
+        yaxis=dict(
+            showgrid=False,
+            automargin=True
+        ),
+        bargap=0.2
+    )
+    
+    return fig
 
-# Get aggregated data for bar chart
-agg_data, chart_title, group_by = prepare_bar_chart_data(
-    table_df, 
-    selected_continent, 
+# Get bar chart
+bar_chart = prepare_bar_chart_data(
+    table_df,
+    selected_continent,
     selected_countries
 )
 
-# Create bar chart
-fig = go.Figure()
-
-# Add bars
-fig.add_trace(go.Bar(
-    x=agg_data['avg_sales'],
-    y=agg_data[group_by],
-    orientation='h',
-    marker_color='#2ecc71',
-    text=[f"${x:,.2f}" for x in agg_data['avg_sales']],  # Format as currency
-    textposition='auto',
-))
-
-# Update layout
-fig.update_layout(
-    title=dict(
-        text=f"{chart_title} (per {period_label})",
-        x=0.5,
-        xanchor='center'
-    ),
-    xaxis_title="Average Sales ($)",
-    yaxis_title=group_by.title(),
-    height=max(len(agg_data) * 50, 400),  # Dynamic height based on number of bars
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    font=dict(color='#2ecc71'),
-    showlegend=False,
-    margin=dict(l=20, r=20, t=40, b=20),
-    xaxis=dict(
-        showgrid=True,
-        gridcolor='rgba(46, 204, 113, 0.1)',
-        tickformat="$,.2f"  # Format as currency
-    ),
-    yaxis=dict(
-        showgrid=False,
-        automargin=True
-    ),
-    bargap=0.2
-)
-
-# Display the chart
-st.plotly_chart(fig, use_container_width=True)
+# Display the bar chart
+st.plotly_chart(bar_chart, use_container_width=True)
 
 # Add time comparison table
 st.markdown("""
 <h2 class="table-header">⏱️ Time Comparison</h2>
 """, unsafe_allow_html=True)
 
-# Add time filters in columns based on view
-st.markdown('<div class="filter-section">', unsafe_allow_html=True)
-
-# Determine number of columns based on view
+# Time period filters
 if selected_view == "Daily View":
     time_col1, time_col2, time_col3 = st.columns(3)
 elif selected_view == "Monthly View":
@@ -699,6 +710,12 @@ else:  # Quarterly View
 # Get unique years from the data
 years = sorted(sales_df['DateKey'].dt.year.unique())
 
+# Initialize session state for synchronization
+if 'selected_month' not in st.session_state:
+    st.session_state.selected_month = "All Months"
+if 'selected_week' not in st.session_state:
+    st.session_state.selected_week = "All Weeks"
+
 # Year filter (always visible)
 with time_col1:
     selected_year = st.selectbox(
@@ -707,62 +724,54 @@ with time_col1:
         key="year_filter"
     )
 
-# Week filter (visible only for daily view)
-if selected_view == "Daily View":
-    with time_col3:
-        week_options = ["All Weeks"] + [f"Week {week:02d}" for week in range(1, 54)]
-        selected_week = st.selectbox(
-            "Select Week",
-            week_options,
-            key="week_filter"
-        )
-        
-        # If a specific week is selected, determine its month
-        if selected_week != "All Weeks":
-            week_num = int(selected_week.split()[1])
-            # Create a sample date for the selected week
-            if selected_year != "All Years":
-                year = int(selected_year)
-            else:
-                year = years[-1]  # Use the most recent year if all years selected
-            
-            # Get the date of the first day of the selected week
-            first_day = pd.Timestamp(f"{year}-01-01") + pd.Timedelta(weeks=week_num-1)
-            # Get the month number (1-12)
-            week_month = first_day.month
-            # Store the month number in session state
-            st.session_state.selected_month = f"{week_month:02d}"
-else:
-    selected_week = "All Weeks"
-
 # Month filter (visible for daily and monthly views)
 if selected_view in ["Daily View", "Monthly View"]:
     with time_col2:
         month_options = ["All Months"] + [f"{month:02d}" for month in range(1, 13)]
-        # If a week is selected, use its month, otherwise allow free selection
-        if selected_view == "Daily View" and selected_week != "All Weeks":
-            try:
-                month_index = month_options.index(st.session_state.selected_month)
-                selected_month = st.selectbox(
-                    "Select Month",
-                    month_options,
-                    index=month_index,
-                    key="month_filter"
-                )
-            except (ValueError, AttributeError):
-                selected_month = st.selectbox(
-                    "Select Month",
-                    month_options,
-                    key="month_filter"
-                )
-        else:
-            selected_month = st.selectbox(
-                "Select Month",
-                month_options,
-                key="month_filter"
-            )
-elif selected_view == "Quarterly View":
-    # Quarter filter for quarterly view
+        
+        def on_month_change():
+            # Update week options when month changes
+            if st.session_state.month_filter != "All Months":
+                available_weeks = get_weeks_for_month(sales_df, st.session_state.month_filter)
+                if st.session_state.week_filter != "All Weeks":
+                    week_num = int(st.session_state.week_filter.split()[1])
+                    if week_num not in available_weeks:
+                        st.session_state.week_filter = "All Weeks"
+            st.session_state.selected_month = st.session_state.month_filter
+        
+        selected_month = st.selectbox(
+            "Select Month",
+            month_options,
+            key="month_filter",
+            on_change=on_month_change
+        )
+
+# Week filter (visible only for daily view)
+if selected_view == "Daily View":
+    with time_col3:
+        def on_week_change():
+            # Update month when week changes
+            if st.session_state.week_filter != "All Weeks":
+                new_month = get_month_for_week(sales_df, st.session_state.week_filter)
+                st.session_state.month_filter = new_month
+                st.session_state.selected_month = new_month
+            st.session_state.selected_week = st.session_state.week_filter
+        
+        # Get weeks based on selected month
+        available_weeks = get_weeks_for_month(sales_df, selected_month)
+        week_options = ["All Weeks"] + [f"Week {week:02d}" for week in available_weeks]
+        
+        selected_week = st.selectbox(
+            "Select Week",
+            week_options,
+            key="week_filter",
+            on_change=on_week_change
+        )
+else:
+    selected_week = "All Weeks"
+
+# Quarter filter (visible only for quarterly view)
+if selected_view == "Quarterly View":
     with time_col2:
         selected_month = "All Months"  # Keep this for compatibility
         selected_quarter = st.selectbox(
@@ -771,10 +780,7 @@ elif selected_view == "Quarterly View":
             key="quarter_filter"
         )
 else:
-    selected_month = "All Months"
     selected_quarter = "All Quarters"
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # Prepare time comparison data with time filters
 def prepare_time_comparison(data, continent_filter, country_filters, view_period, year_filter, month_filter, week_filter, quarter_filter="All Quarters"):
@@ -938,4 +944,85 @@ st.dataframe(
             width="large"
         )
     }
-) 
+)
+
+# Add visual summary section
+st.markdown("""
+<style>
+.chart-section {
+    margin-top: 2rem;
+    padding: 1rem;
+    background-color: rgba(14, 17, 23, 0.2);
+    border-radius: 10px;
+    border: 2px solid rgba(46, 204, 113, 0.3);
+}
+.chart-section:hover {
+    border-color: rgba(46, 204, 113, 0.6);
+    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="chart-section">', unsafe_allow_html=True)
+st.subheader("Visual Summary")
+
+# Prepare data for visualization
+# Convert currency strings to numeric values
+time_comparison['Total Sales Numeric'] = time_comparison['Total Sales'].apply(
+    lambda x: float(x.replace('$', '').replace('B', '000000000').replace('M', '000000').replace(',', ''))
+)
+
+# Create bar chart
+if len(time_comparison) > 0:
+    fig = px.bar(
+        time_comparison,
+        x='Region',
+        y='Total Sales Numeric',
+        color='Year' if 'Year' in time_comparison.columns else None,
+        barmode='group',
+        title=f"Sales Distribution by Region{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - Month ' + selected_month if selected_month != 'All Months' else ''}",
+        labels={
+            'Region': 'Region',
+            'Total Sales Numeric': 'Total Sales ($)',
+            'Year': 'Year'
+        },
+        template="plotly_dark"
+    )
+
+    # Customize the chart
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        xaxis_title='Region',
+        yaxis_title='Total Sales ($)',
+        yaxis=dict(
+            tickformat='$,.0f',
+            gridcolor='rgba(255,255,255,0.1)'
+        ),
+        xaxis=dict(
+            gridcolor='rgba(255,255,255,0.1)'
+        ),
+        showlegend=True if 'Year' in time_comparison.columns else False,
+        legend=dict(
+            bgcolor='rgba(0,0,0,0)',
+            bordercolor='rgba(255,255,255,0.3)',
+            borderwidth=1
+        ),
+        hovermode='x unified'
+    )
+
+    # Update hover template
+    fig.update_traces(
+        hovertemplate="<br>".join([
+            "Region: %{x}",
+            "Total Sales: %{y:$,.2f}",
+            "<extra></extra>"
+        ])
+    )
+
+    # Display the chart
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("No data available to visualize for the selected filters.")
+
+st.markdown('</div>', unsafe_allow_html=True) 
