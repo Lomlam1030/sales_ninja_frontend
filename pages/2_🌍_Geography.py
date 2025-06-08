@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import numpy as np
 import calendar
 import plotly.express as px
+from utils.data_loader import initialize_session_state, get_geography_data
 
 # Configure the page
 st.set_page_config(layout="wide", page_title="Geography - Sales Ninja")
@@ -293,6 +294,12 @@ def create_time_series_chart(data, time_cols, region_col, metric='Total Sales', 
     )
     
     return fig
+
+# Initialize session state
+initialize_session_state()
+
+# Get the synthetic geography data
+map_df = get_geography_data()
 
 # Load Data
 sales_df = load_sales_data()

@@ -267,6 +267,5 @@ st.markdown("""
         transition: all 0.3s ease;
     }
     </style>
-""", unsafe_allow_html=True)
-
-# ... rest of the code ... 
+"""
+, unsafe_allow_html=True) 

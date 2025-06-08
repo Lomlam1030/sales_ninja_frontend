@@ -2,23 +2,62 @@
 data/*.csv
 data/*.csvZone.Identifier
 
-# Virtual Environment
-sales_venv/
-venv/
-env/
-
-# Python cache files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environment variables
-.env
+# Virtual Environment
+venv/
+env/
+ENV/
 
-# IDE settings
-.vscode/
+# IDE
 .idea/
-
-# OS
+.vscode/
+*.swp
+*.swo
 .DS_Store
-Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local development
+.env
+.env.local
+*.sqlite3
+
+# Google Cloud credentials
+**/credentials.json
+**/client_secrets.json
+**/service-account.json
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
