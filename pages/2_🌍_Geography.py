@@ -403,6 +403,12 @@ st.markdown("""
     padding-left: 10px;
     border-left: 4px solid #2ecc71;
 }
+.filter-section {
+    background-color: rgba(46, 204, 113, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
 .stDataFrame {
     font-size: 16px !important;
 }
@@ -439,10 +445,56 @@ def format_currency(value):
 table_data['Average Sales'] = table_data['avg_sales'].apply(format_currency)
 table_data['Total Sales'] = table_data['total_sales'].apply(format_currency)
 
+# Add filters above the table
+st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+
+# Create filtered dataset
+filtered_data = table_data.copy()
+
+# Get unique continents and sort them
+continents = sorted(filtered_data['continent'].unique())
+selected_continent = col1.selectbox(
+    "Select Continent",
+    ["All Continents"] + continents,
+    key="continent_filter"
+)
+
+# Apply continent filter and get available countries
+if selected_continent != "All Continents":
+    filtered_data = filtered_data[filtered_data['continent'] == selected_continent]
+
+# Get available countries based on current filter
+available_countries = sorted(filtered_data['country'].unique())
+selected_country = col2.selectbox(
+    "Select Country",
+    ["All Countries"] + available_countries,
+    key="country_filter"
+)
+
+# Apply country filter
+if selected_country != "All Countries":
+    filtered_data = filtered_data[filtered_data['country'] == selected_country]
+
+# Format the sales columns for the filtered data
+filtered_data['Average Sales'] = filtered_data['avg_sales'].apply(format_currency)
+filtered_data['Total Sales'] = filtered_data['total_sales'].apply(format_currency)
+
+# Debug information
+with st.expander("Debug Information"):
+    st.write("Selected continent:", selected_continent)
+    st.write("Selected country:", selected_country)
+    st.write("Number of records after filtering:", len(filtered_data))
+    if len(filtered_data) > 0:
+        st.write("Sample of filtered data:")
+        st.write(filtered_data[['continent', 'country', 'avg_sales', 'total_sales']].head())
+
+st.markdown('</div>', unsafe_allow_html=True)
+
 # Prepare final table with selected columns and renamed
-final_table = table_data[[
+final_table = filtered_data[[
+    'continent',
     'country', 
-    'continent', 
     'Average Sales',
     'Total Sales'
 ]].rename(columns={
@@ -456,17 +508,24 @@ final_table = final_table.rename(columns={
     'Total Sales': f'Total Sales (All {period_label}s)'
 })
 
+# Calculate height based on number of rows
+# Add 3 for header and padding
+num_rows = len(final_table) + 3
+# If less than 10 rows, show all without scrolling
+height = min(max(num_rows * 35, 200), 400) if len(final_table) <= 10 else 400
+
 # Display the table with custom formatting
 st.dataframe(
     final_table,
     hide_index=True,
+    height=height,
     column_config={
-        "Country": st.column_config.TextColumn(
-            "Country",
-            width="medium"
-        ),
         "Continent": st.column_config.TextColumn(
             "Continent",
+            width="medium"
+        ),
+        "Country": st.column_config.TextColumn(
+            "Country",
             width="medium"
         ),
         f"Average Sales per {period_label}": st.column_config.TextColumn(
