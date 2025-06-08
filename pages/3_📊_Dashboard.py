@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -15,386 +16,257 @@ add_page_title(
     emoji="📊"
 )
 
-def generate_dummy_data():
-    """Generate dummy data with revenues, costs, sales volume, and profits"""
-    current_date = datetime.now()
-    start_date = current_date - timedelta(days=3*365)  # 3 years of data
-    dates = pd.date_range(start=start_date, end=current_date, freq='D')
+# Update the color scheme constants
+COLOR_SCHEME = {
+    'primary': '#FF4B4B',    # Red
+    'secondary': '#FF8C00',  # Dark Orange
+    'accent': '#FFD700',     # Gold
+    'text_primary': '#2C3E50',
+    'background': 'rgba(255, 244, 230, 0.1)'  # Light warm background
+}
+
+def generate_sample_data():
+    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
+    np.random.seed(42)
     
-    # Product categories and subcategories
-    categories = {
-        'Electronics': ['Smartphones', 'Laptops', 'Accessories'],
-        'Fashion': ['Clothing', 'Shoes', 'Accessories'],
-        'Home & Living': ['Furniture', 'Decor', 'Kitchen'],
-        'Sports': ['Equipment', 'Apparel', 'Accessories']
-    }
+    data = pd.DataFrame({
+        'date': dates,
+        'net_sales': np.random.normal(10000, 2000, len(dates)),
+        'sales_volume': np.random.normal(500, 100, len(dates)),
+        'has_promotion': np.random.choice([True, False], len(dates), p=[0.3, 0.7])
+    })
     
-    # Base values
-    base_volume = 1000  # base daily sales volume
-    base_price = 100    # average price per unit
-    base_cost = 70      # average cost per unit
+    # Increase sales for promotional days
+    data.loc[data['has_promotion'], 'net_sales'] *= 1.4
+    data.loc[data['has_promotion'], 'sales_volume'] *= 1.5
     
-    # Generate daily data with some randomness and trends
-    data = []
-    for date in dates:
-        # For each date, generate data for different categories and subcategories
-        for category, subcategories in categories.items():
-            for subcategory in subcategories:
-                # Add seasonal variation (higher in Q4, lower in Q1)
-                season_factor = 1 + 0.3 * np.sin(2 * np.pi * (date.dayofyear / 365 - 0.25))
-                # Add day of week variation (lower on weekends)
-                dow_factor = 0.7 if date.weekday() >= 5 else 1.0
-                # Add yearly growth (10% per year)
-                year_factor = 1 + 0.1 * ((date - start_date).days / 365)
-                
-                # Randomly determine if product is on promotion
-                is_promotion = np.random.choice([True, False], p=[0.2, 0.8])  # 20% chance of promotion
-                
-                # Adjust price and volume based on promotion
-                promotion_price_factor = 0.8 if is_promotion else 1.0  # 20% discount on promotion
-                promotion_volume_factor = 1.5 if is_promotion else 1.0  # 50% more volume on promotion
-                
-                # Calculate base metrics with variations
-                volume = int(base_volume * season_factor * dow_factor * year_factor * 
-                           promotion_volume_factor * np.random.normal(1, 0.1))
-                price_per_unit = base_price * promotion_price_factor * np.random.normal(1, 0.05)
-                cost_per_unit = base_cost * np.random.normal(1, 0.03)
-                
-                revenue = volume * price_per_unit
-                cost = volume * cost_per_unit
-                profit = revenue - cost
-                
-                data.append({
-                    'date': date,
-                    'year': date.year,
-                    'category': category,
-                    'subcategory': subcategory,
-                    'is_promotion': is_promotion,
-                    'volume': volume,
-                    'revenue': revenue,
-                    'cost': cost,
-                    'profit': profit
-                })
-    
-    return pd.DataFrame(data)
+    return data
 
-def aggregate_data(df, freq='D'):
-    """Aggregate data by the specified frequency"""
-    if freq == 'D':
-        return df
-    
-    agg_cols = {
-        'volume': 'sum',
-        'revenue': 'sum',
-        'cost': 'sum',
-        'profit': 'sum',
-        'year': 'first',
-        'category': 'first',
-        'subcategory': 'first',
-        'is_promotion': 'first'
-    }
-    
-    # Group by the appropriate frequency
-    if freq == 'M':
-        return df.resample('M', on='date').agg(agg_cols).reset_index()
-    else:  # 'Q'
-        return df.resample('Q', on='date').agg(agg_cols).reset_index()
+# Load data
+data = generate_sample_data()
 
-# Generate fresh data
-st.session_state.dashboard_df = generate_dummy_data()
+# Dashboard Title
+st.markdown("""<h1 class="dashboard-header">Sales Performance Dashboard</h1>""", unsafe_allow_html=True)
 
-# Sidebar filters
-st.sidebar.header('Filters')
+# Date Range Filter
+col1, col2 = st.columns(2)
+with col1:
+    start_date = st.date_input("Start Date", data['date'].min())
+with col2:
+    end_date = st.date_input("End Date", data['date'].max())
 
-# Year filter
-selected_year = st.sidebar.selectbox(
-    'Select Year',
-    sorted(st.session_state.dashboard_df['year'].unique(), reverse=True)
-)
+# Filter data based on date range
+filtered_data = data[(data['date'].dt.date >= start_date) & (data['date'].dt.date <= end_date)]
 
-# Category and subcategory filter
-categories = st.session_state.dashboard_df['category'].unique()
-selected_category = st.sidebar.selectbox('Product Category', ['All'] + list(categories))
-
-if selected_category != 'All':
-    subcategories = st.session_state.dashboard_df[
-        st.session_state.dashboard_df['category'] == selected_category
-    ]['subcategory'].unique()
-    selected_subcategory = st.sidebar.selectbox('Product Subcategory', ['All'] + list(subcategories))
-else:
-    selected_subcategory = 'All'
-
-# Promotion filter
-selected_promotion = st.sidebar.selectbox('Promotion', ['All', 'Yes', 'No'])
-
-# Filter data based on all selections
-filtered_df = st.session_state.dashboard_df[
-    st.session_state.dashboard_df['year'] == selected_year
-]
-
-if selected_category != 'All':
-    filtered_df = filtered_df[filtered_df['category'] == selected_category]
-    
-if selected_subcategory != 'All':
-    filtered_df = filtered_df[filtered_df['subcategory'] == selected_subcategory]
-
-if selected_promotion != 'All':
-    is_promotion = True if selected_promotion == 'Yes' else False
-    filtered_df = filtered_df[filtered_df['is_promotion'] == is_promotion]
-
-# Create tabs for different views
-tab1, tab2, tab3 = st.tabs(["Daily View", "Monthly View", "Quarterly View"])
-
-# Get the appropriate view based on selected tab
-if tab1.active:
-    display_df = filtered_df
-    period_label = "Daily"
-elif tab2.active:
-    display_df = aggregate_data(filtered_df, 'M')
-    period_label = "Monthly"
-else:
-    display_df = aggregate_data(filtered_df, 'Q')
-    period_label = "Quarterly"
-
-# Style for KPI containers
+# Update KPI metrics styling
 st.markdown("""
-<style>
-.kpi-container {
-    padding: 1rem;
-    border-radius: 10px;
-    margin-top: 2rem;
-    background-color: rgba(14, 17, 23, 0.2);
-}
-[data-testid="stHorizontalBlock"] > div {
-    padding: 0 !important;
-    gap: 1rem !important;
-}
-[data-testid="stHorizontalBlock"] {
-    gap: 1rem !important;
-    padding: 0 0.5rem !important;
-}
-.kpi-metric {
-    background: linear-gradient(135deg, rgba(255, 87, 34, 0.1) 0%, rgba(255, 167, 38, 0.1) 100%);
-    border: 2px solid rgba(255, 87, 34, 0.3);
-    border-radius: 10px;
-    padding: 1rem;
-    text-align: center;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 0.5rem;
-}
-.kpi-metric:hover {
-    border-color: rgba(255, 87, 34, 0.6);
-    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
-}
-.kpi-value-container {
-    padding: 0.5rem;
-    background-color: rgba(255, 87, 34, 0.1);
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-}
-.kpi-value {
-    color: #ff5722;
-    font-size: 2rem;
-    font-weight: bold;
-    line-height: 1.2;
-    margin: 0;
-    padding: 0.5rem;
-}
-.kpi-label {
-    color: #fafafa;
-    font-size: 1.1rem;
-    font-weight: 500;
-    padding: 0.5rem;
-    background-color: rgba(255, 167, 38, 0.1);
-    border-radius: 8px;
-    margin-top: auto;
-}
-div[data-testid="stMetricValue"] {
-    display: none;
-}
-div[data-testid="stMetricLabel"] {
-    display: none;
-}
-div[data-testid="stMetricDelta"] {
-    display: none;
-}
-</style>
+    <div style="
+        background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+        padding: 20px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border: 1px solid rgba(255, 140, 0, 0.2);
+    ">
+    <h2 class="metric-header">Key Performance Indicators</h2>
+    </div>
 """, unsafe_allow_html=True)
 
-# Display KPIs
-st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
-col1, col2, col3, col4 = st.columns(4)
+# Calculate KPIs
+total_net_sales = filtered_data['net_sales'].sum()
+total_volume = filtered_data['sales_volume'].sum()
+avg_net_sales = filtered_data['net_sales'].mean()
+avg_volume = filtered_data['sales_volume'].mean()
 
-# Calculate KPI values
-total_revenue = display_df['revenue'].sum()
-total_costs = display_df['cost'].sum()
-total_volume = display_df['volume'].sum()
-total_profit = display_df['profit'].sum()
+# Display KPIs in columns
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-# Format values
-def format_currency(value):
-    if value >= 1e9:
-        return f"${value/1e9:.1f}B"
-    elif value >= 1e6:
-        return f"${value/1e6:.1f}M"
-    else:
-        return f"${value:,.0f}"
+with kpi1:
+    st.metric("Total Net Sales", f"${total_net_sales:,.2f}")
+with kpi2:
+    st.metric("Total Sales Volume", f"{total_volume:,.0f}")
+with kpi3:
+    st.metric("Avg Daily Net Sales", f"${avg_net_sales:,.2f}")
+with kpi4:
+    st.metric("Avg Daily Volume", f"{avg_volume:,.0f}")
 
-def format_volume(value):
-    if value >= 1e9:
-        return f"{value/1e9:.1f}B"
-    elif value >= 1e6:
-        return f"{value/1e6:.1f}M"
-    else:
-        return f"{value:,.0f}"
-
-def create_kpi_html(label, value, tooltip):
-    return f"""
-    <div class="kpi-metric" title="{tooltip}">
-        <div class="kpi-value-container">
-            <div class="kpi-value">{value}</div>
-        </div>
-        <div class="kpi-label">{label}</div>
+# Promotional Impact Analysis
+st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+        padding: 20px;
+        border-radius: 10px;
+        margin: 20px 0;
+        border: 1px solid rgba(255, 140, 0, 0.2);
+    ">
+    <h2 class="analysis-header">Promotional Impact Analysis</h2>
     </div>
-    """
+""", unsafe_allow_html=True)
 
-# Display metrics in columns
+# Calculate metrics by promotion status
+promo_analysis = filtered_data.groupby('has_promotion').agg({
+    'net_sales': ['mean', 'sum', 'count'],
+    'sales_volume': ['mean', 'sum']
+}).round(2)
+
+# Create comparison metrics
+promo_impact = pd.DataFrame({
+    'Metric': ['Average Daily Net Sales', 'Average Daily Volume'],
+    'With Promotion': [
+        promo_analysis.loc[True, ('net_sales', 'mean')],
+        promo_analysis.loc[True, ('sales_volume', 'mean')]
+    ],
+    'Without Promotion': [
+        promo_analysis.loc[False, ('net_sales', 'mean')],
+        promo_analysis.loc[False, ('sales_volume', 'mean')]
+    ]
+})
+
+promo_impact['Lift %'] = ((promo_impact['With Promotion'] - promo_impact['Without Promotion']) / 
+                         promo_impact['Without Promotion'] * 100).round(2)
+
+# Display promotional impact
+col1, col2 = st.columns([2, 1])
+
 with col1:
-    st.markdown(
-        create_kpi_html(
-            "Total Revenue",
-            format_currency(total_revenue),
-            "Total revenue for the selected period"
+    # Update the promotional impact chart colors
+    fig = go.Figure(data=[
+        go.Bar(
+            name='With Promotion',
+            x=promo_impact['Metric'],
+            y=promo_impact['With Promotion'],
+            marker_color='#FF4B4B'  # Red
         ),
-        unsafe_allow_html=True
+        go.Bar(
+            name='Without Promotion',
+            x=promo_impact['Metric'],
+            y=promo_impact['Without Promotion'],
+            marker_color='#FF8C00'  # Dark Orange
+        )
+    ])
+    
+    fig.update_layout(
+        title='Sales Metrics: Promotional vs Non-Promotional',
+        barmode='group',
+        plot_bgcolor='rgba(255, 244, 230, 0.1)',
+        paper_bgcolor='rgba(255, 244, 230, 0)',
+        height=400,
+        font={'color': '#2C3E50'},
+        title_font_color='#FF4B4B'
     )
+    st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    st.markdown(
-        create_kpi_html(
-            "Total Costs",
-            format_currency(total_costs),
-            "Total costs for the selected period"
-        ),
-        unsafe_allow_html=True
+    # Display impact metrics
+    st.markdown("### Promotional Lift")
+    for idx, row in promo_impact.iterrows():
+        st.metric(
+            row['Metric'],
+            f"{row['Lift %']:+.2f}%",
+            delta_color="normal"
+        )
+
+# Time Series Analysis
+st.markdown("""<h2 class="analysis-header">Time Series Analysis</h2>""", unsafe_allow_html=True)
+
+# Create time series plots
+fig_time = go.Figure()
+
+# Update the time series chart colors
+fig_time.add_trace(go.Scatter(
+    x=filtered_data['date'],
+    y=filtered_data['net_sales'],
+    name='Net Sales',
+    line=dict(color='#FF4B4B', width=2)  # Red
+))
+
+fig_time.add_trace(go.Scatter(
+    x=filtered_data['date'],
+    y=filtered_data['sales_volume'],
+    name='Sales Volume',
+    line=dict(color='#FFD700', width=2),  # Gold
+    yaxis='y2'
+))
+
+fig_time.update_layout(
+    title='Net Sales and Volume Over Time',
+    xaxis=dict(
+        title='Date',
+        gridcolor='rgba(255, 140, 0, 0.1)',
+        title_font_color='#FF8C00'
+    ),
+    yaxis=dict(
+        title='Net Sales ($)',
+        titlefont=dict(color='#FF4B4B'),
+        tickfont=dict(color='#FF4B4B'),
+        gridcolor='rgba(255, 75, 75, 0.1)'
+    ),
+    yaxis2=dict(
+        title='Sales Volume',
+        titlefont=dict(color='#FFD700'),
+        tickfont=dict(color='#FFD700'),
+        overlaying='y',
+        side='right',
+        gridcolor='rgba(255, 215, 0, 0.1)'
+    ),
+    plot_bgcolor='rgba(255, 244, 230, 0.1)',
+    paper_bgcolor='rgba(255, 244, 230, 0)',
+    height=500,
+    showlegend=True,
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1,
+        font=dict(color='#2C3E50')
     )
+)
 
-with col3:
-    st.markdown(
-        create_kpi_html(
-            "Sales Volume",
-            format_volume(total_volume),
-            "Total units sold in the selected period"
-        ),
-        unsafe_allow_html=True
-    )
+st.plotly_chart(fig_time, use_container_width=True)
 
-with col4:
-    st.markdown(
-        create_kpi_html(
-            "Total Profit",
-            format_currency(total_profit),
-            "Total profit for the selected period"
-        ),
-        unsafe_allow_html=True
-    )
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Add charts section
+# Update the CSS styling
 st.markdown("""
-<style>
-.chart-container {
-    background-color: rgba(14, 17, 23, 0.2);
-    border-radius: 10px;
-    padding: 1rem;
-    margin-top: 2rem;
-}
-</style>
+    <style>
+    .dashboard-header {
+        background: linear-gradient(45deg, #FF4B4B, #FF8C00);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.5em;
+        font-weight: bold;
+        margin-bottom: 1em;
+        text-align: center;
+        padding: 20px;
+    }
+    .metric-header, .analysis-header {
+        color: #FF4B4B;
+        font-size: 1.8em;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+        border-left: 5px solid #FF8C00;
+        padding-left: 10px;
+    }
+    div[data-testid="stMetricValue"] {
+        color: #FF4B4B !important;
+        font-weight: bold;
+    }
+    div[data-testid="stMetricLabel"] {
+        color: #FF8C00 !important;
+    }
+    div[data-testid="stMetricDelta"] {
+        color: #FFD700 !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div {
+        background-color: rgba(255, 244, 230, 0.1);
+        border-radius: 10px;
+        padding: 10px !important;
+        border: 1px solid rgba(255, 140, 0, 0.2);
+    }
+    div[data-testid="stHorizontalBlock"] > div:hover {
+        box-shadow: 0 0 10px rgba(255, 140, 0, 0.2);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+    </style>
 """, unsafe_allow_html=True)
-
-st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-
-# Create 2x2 grid for charts
-chart_col1, chart_col2 = st.columns(2)
-
-with chart_col1:
-    # Revenue Chart
-    revenue_chart = px.bar(
-        display_df,
-        x='date',
-        y='revenue',
-        title=f'{period_label} Revenue',
-        color_discrete_sequence=['#ff5722'],  # Deep orange
-        template='plotly_dark'
-    )
-    revenue_chart.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis_title='',
-        yaxis_title='Revenue ($)',
-        showlegend=False
-    )
-    st.plotly_chart(revenue_chart, use_container_width=True)
-
-    # Sales Volume Chart
-    volume_chart = px.bar(
-        display_df,
-        x='date',
-        y='volume',
-        title=f'{period_label} Sales Volume',
-        color_discrete_sequence=['#ffa726'],  # Yellow-orange
-        template='plotly_dark'
-    )
-    volume_chart.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis_title='',
-        yaxis_title='Units Sold',
-        showlegend=False
-    )
-    st.plotly_chart(volume_chart, use_container_width=True)
-
-with chart_col2:
-    # Costs Chart
-    costs_chart = px.bar(
-        display_df,
-        x='date',
-        y='cost',
-        title=f'{period_label} Costs',
-        color_discrete_sequence=['#f4511e'],  # Darker orange
-        template='plotly_dark'
-    )
-    costs_chart.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis_title='',
-        yaxis_title='Costs ($)',
-        showlegend=False
-    )
-    st.plotly_chart(costs_chart, use_container_width=True)
-
-    # Profit Chart
-    profit_chart = px.bar(
-        display_df,
-        x='date',
-        y='profit',
-        title=f'{period_label} Profit',
-        color_discrete_sequence=['#e64a19'],  # Reddish-orange
-        template='plotly_dark'
-    )
-    profit_chart.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis_title='',
-        yaxis_title='Profit ($)',
-        showlegend=False
-    )
-    st.plotly_chart(profit_chart, use_container_width=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ... rest of the code ... 
