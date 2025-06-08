@@ -174,8 +174,8 @@ st.markdown("""
     padding: 0 0.5rem !important;
 }
 .kpi-metric {
-    background: linear-gradient(135deg, rgba(46, 204, 113, 0.1) 0%, rgba(52, 152, 219, 0.1) 100%);
-    border: 2px solid rgba(46, 204, 113, 0.3);
+    background: linear-gradient(135deg, rgba(255, 87, 34, 0.1) 0%, rgba(255, 167, 38, 0.1) 100%);
+    border: 2px solid rgba(255, 87, 34, 0.3);
     border-radius: 10px;
     padding: 1rem;
     text-align: center;
@@ -186,17 +186,17 @@ st.markdown("""
     gap: 0.5rem;
 }
 .kpi-metric:hover {
-    border-color: rgba(46, 204, 113, 0.6);
-    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
+    border-color: rgba(255, 87, 34, 0.6);
+    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
 }
 .kpi-value-container {
     padding: 0.5rem;
-    background-color: rgba(46, 204, 113, 0.1);
+    background-color: rgba(255, 87, 34, 0.1);
     border-radius: 8px;
     margin-bottom: 0.5rem;
 }
 .kpi-value {
-    color: #2ecc71;
+    color: #ff5722;
     font-size: 2rem;
     font-weight: bold;
     line-height: 1.2;
@@ -208,7 +208,7 @@ st.markdown("""
     font-size: 1.1rem;
     font-weight: 500;
     padding: 0.5rem;
-    background-color: rgba(52, 152, 219, 0.1);
+    background-color: rgba(255, 167, 38, 0.1);
     border-radius: 8px;
     margin-top: auto;
 }
@@ -328,7 +328,7 @@ with chart_col1:
         x='date',
         y='revenue',
         title=f'{period_label} Revenue',
-        color_discrete_sequence=['#2ecc71'],  # Green shade
+        color_discrete_sequence=['#ff5722'],  # Deep orange
         template='plotly_dark'
     )
     revenue_chart.update_layout(
@@ -346,7 +346,7 @@ with chart_col1:
         x='date',
         y='volume',
         title=f'{period_label} Sales Volume',
-        color_discrete_sequence=['#3498db'],  # Blue shade
+        color_discrete_sequence=['#ffa726'],  # Yellow-orange
         template='plotly_dark'
     )
     volume_chart.update_layout(
@@ -365,7 +365,7 @@ with chart_col2:
         x='date',
         y='cost',
         title=f'{period_label} Costs',
-        color_discrete_sequence=['#1abc9c'],  # Turquoise shade
+        color_discrete_sequence=['#f4511e'],  # Darker orange
         template='plotly_dark'
     )
     costs_chart.update_layout(
@@ -383,7 +383,7 @@ with chart_col2:
         x='date',
         y='profit',
         title=f'{period_label} Profit',
-        color_discrete_sequence=['#27ae60'],  # Darker green shade
+        color_discrete_sequence=['#e64a19'],  # Reddish-orange
         template='plotly_dark'
     )
     profit_chart.update_layout(

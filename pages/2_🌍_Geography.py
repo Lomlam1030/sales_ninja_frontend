@@ -21,6 +21,28 @@ add_page_title(
     emoji="🌍"
 )
 
+st.markdown("""
+<style>
+/* Remove all vertical lines */
+[data-testid="stSidebar"] > div:first-child,
+[data-testid="stSidebarNav"] > ul,
+[data-testid="stSidebarNav"] > ul > li > div,
+[data-testid="stSidebarNav"] > ul > li > a,
+.block-container,
+.element-container,
+.stMarkdown,
+.stMarkdown h1,
+.stMarkdown h2,
+.stMarkdown h3,
+section[data-testid="stSidebar"],
+.main .block-container {
+    border-left: none !important;
+    border-right: none !important;
+    padding-left: 0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 def get_weeks_for_month(df, month):
     """Get the weeks that fall within a specific month"""
     if month == "All Months":
@@ -238,7 +260,7 @@ st.markdown("""
 .main-title {
     font-size: 42px;
     font-weight: bold;
-    color: #00B4D8;
+    color: #ff5722;  /* Deep orange for main title */
     margin-bottom: 20px;
     text-align: center;
 }
@@ -269,6 +291,62 @@ st.markdown("""
 [data-testid="stVerticalBlock"] {
     gap: 0 !important;
 }
+.kpi-container {
+    padding: 1rem;
+    border-radius: 10px;
+    margin-top: 2rem;
+    background-color: rgba(14, 17, 23, 0.2);
+}
+.kpi-metric {
+    background: linear-gradient(135deg, rgba(244, 81, 30, 0.1) 0%, rgba(255, 87, 34, 0.1) 100%);
+    border: 2px solid rgba(230, 74, 25, 0.3);
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.kpi-metric:hover {
+    border-color: rgba(216, 67, 21, 0.6);
+    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
+}
+.kpi-value-container {
+    padding: 0.5rem;
+    background-color: rgba(244, 81, 30, 0.1);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+.kpi-value {
+    color: #ff5722;
+    font-size: 2rem;
+    font-weight: bold;
+    line-height: 1.2;
+    margin: 0;
+    padding: 0.5rem;
+}
+.kpi-label {
+    color: #fafafa;
+    font-size: 1.1rem;
+    font-weight: 500;
+    padding: 0.5rem;
+    background-color: rgba(230, 74, 25, 0.1);
+    border-radius: 8px;
+    margin-top: auto;
+}
+.chart-section {
+    margin-top: 2rem;
+    padding: 1rem;
+    background-color: rgba(14, 17, 23, 0.2);
+    border-radius: 10px;
+    border: 2px solid rgba(230, 74, 25, 0.3);  /* Reddish-orange for border */
+}
+.chart-section:hover {
+    border-color: rgba(216, 67, 21, 0.6);  /* Deep reddish-orange for hover */
+    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);  /* Deep orange for shadow */
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -291,13 +369,13 @@ else:  # Quarterly View
     table_df = aggregate_by_period_with_totals(sales_df, 'Q')
 
 # Debug information in sidebar
-st.sidebar.write("Current view:", period_label)
-st.sidebar.write("Number of Countries:", len(display_df['country'].unique()))
-if len(display_df) > 0:
-    st.sidebar.write("Sample Countries:", ", ".join(display_df['country'].head().tolist()))
+st.sidebar.markdown("### Current view: " + selected_view.split()[0])
 
-# Add debug information for columns
-st.sidebar.write("Available columns:", list(table_df.columns))
+# Show number of countries and sample
+num_countries = len(table_df['country'].unique())
+sample_countries = ", ".join(sorted(table_df['country'].unique())[:5])
+st.sidebar.markdown(f"Number of Countries: {num_countries}")
+st.sidebar.markdown(f"Sample Countries: {sample_countries}")
 
 # Map section
 st.markdown('<div class="map-section">', unsafe_allow_html=True)
@@ -640,7 +718,7 @@ def prepare_bar_chart_data(data, continent_filter, country_filters):
     
     # Group and calculate averages
     agg_data = chart_data.groupby(group_by)['avg_sales'].mean().reset_index()
-    agg_data = agg_data.sort_values('avg_sales', ascending=True)  # Sort for better visualization
+    agg_data = agg_data.sort_values('avg_sales', ascending=False)  # Sort for better visualization
     
     # Create bar chart
     fig = go.Figure()
@@ -650,7 +728,7 @@ def prepare_bar_chart_data(data, continent_filter, country_filters):
         x=agg_data['avg_sales'],
         y=agg_data[group_by],
         orientation='h',
-        marker_color='#2ecc71',
+        marker_color='#ffd700',  # Dark yellow (gold)
         text=[f"${x:,.2f}" for x in agg_data['avg_sales']],  # Format as currency
         textposition='auto',
     ))
@@ -667,12 +745,12 @@ def prepare_bar_chart_data(data, continent_filter, country_filters):
         height=max(len(agg_data) * 50, 400),  # Dynamic height based on number of bars
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#2ecc71'),
+        font=dict(color='#ffd700'),  # Dark yellow text
         showlegend=False,
         margin=dict(l=20, r=20, t=40, b=20),
         xaxis=dict(
             showgrid=True,
-            gridcolor='rgba(46, 204, 113, 0.1)',
+            gridcolor='rgba(255, 215, 0, 0.1)',  # Dark yellow grid
             tickformat="$,.2f"  # Format as currency
         ),
         yaxis=dict(
@@ -785,7 +863,7 @@ else:
 # Prepare time comparison data with time filters
 def prepare_time_comparison(data, continent_filter, country_filters, view_period, year_filter, month_filter, week_filter, quarter_filter="All Quarters"):
     # Start with the original sales data to have access to dates
-    comparison_data = sales_df.copy()
+    comparison_data = data.copy()
     
     # Add year column for grouping when showing all years
     comparison_data['year'] = comparison_data['DateKey'].dt.year
@@ -907,7 +985,7 @@ def prepare_time_comparison(data, continent_filter, country_filters, view_period
 
 # Get time comparison data with time filters
 time_comparison = prepare_time_comparison(
-    table_df,
+    sales_df,
     selected_continent,
     selected_countries,
     selected_view,
@@ -954,11 +1032,11 @@ st.markdown("""
     padding: 1rem;
     background-color: rgba(14, 17, 23, 0.2);
     border-radius: 10px;
-    border: 2px solid rgba(46, 204, 113, 0.3);
+    border: 2px solid rgba(230, 74, 25, 0.3);  /* Reddish-orange for border */
 }
 .chart-section:hover {
-    border-color: rgba(46, 204, 113, 0.6);
-    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
+    border-color: rgba(216, 67, 21, 0.6);  /* Deep reddish-orange for hover */
+    box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);  /* Deep orange for shadow */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -966,60 +1044,172 @@ st.markdown("""
 st.markdown('<div class="chart-section">', unsafe_allow_html=True)
 st.subheader("Visual Summary")
 
-# Prepare data for visualization
-# Convert currency strings to numeric values
-time_comparison['Total Sales Numeric'] = time_comparison['Total Sales'].apply(
-    lambda x: float(x.replace('$', '').replace('B', '000000000').replace('M', '000000').replace(',', ''))
-)
-
-# Create bar chart
 if len(time_comparison) > 0:
-    fig = px.bar(
-        time_comparison,
-        x='Region',
-        y='Total Sales Numeric',
-        color='Year' if 'Year' in time_comparison.columns else None,
-        barmode='group',
-        title=f"Sales Distribution by Region{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - Month ' + selected_month if selected_month != 'All Months' else ''}",
-        labels={
-            'Region': 'Region',
-            'Total Sales Numeric': 'Total Sales ($)',
-            'Year': 'Year'
-        },
-        template="plotly_dark"
+    # Create summary statistics first
+    summary_df = time_comparison.copy()
+    
+    # Get the "Average per Daily" values as numeric
+    summary_df['Daily Average'] = summary_df['Average per Daily'].apply(
+        lambda x: float(x.replace('$', '').replace(',', '').replace('M', '000000').replace('B', '000000000'))
     )
+    
+    # If no year is filtered, show averages by year
+    if selected_year == 'All Years':
+        # Calculate statistics for each region and year
+        stats = summary_df.groupby(['Region', 'Year']).agg({
+            'Daily Average': 'mean'
+        }).round(2).reset_index()
+        
+        stats = stats.sort_values(['Region', 'Year'])
+        
+        # Format currency values
+        stats['Daily Average Formatted'] = stats['Daily Average'].apply(lambda x: f"${x:,.2f}")
+        
+        # Display summary statistics grouped by region and year
+        st.markdown("### Average Daily Sales by Region and Year")
+        pivot_stats = stats.pivot(index='Region', columns='Year', values='Daily Average Formatted')
+        pivot_stats.columns = [f"Year {year}" for year in pivot_stats.columns]
+        pivot_stats = pivot_stats.reset_index()
+        
+        st.dataframe(
+            pivot_stats,
+            hide_index=True
+        )
+        
+        # Create visualization
+        fig = go.Figure()
+        
+        # Color scheme for years
+        year_colors = {
+            2007: '#ffd700',  # Gold
+            2008: '#ff5722',  # Orange
+            2009: '#c41e3a'   # Red
+        }
+        
+        # Add bars for each year
+        for year in sorted(stats['Year'].unique()):
+            year_data = stats[stats['Year'] == year]
+            
+            fig.add_trace(go.Bar(
+                y=year_data['Region'],
+                x=year_data['Daily Average'],
+                name=f'Year {year}',
+                orientation='h',
+                marker_color=year_colors.get(year),
+                text=[f"${x:,.2f}" for x in year_data['Daily Average']],
+                textposition='auto',
+            ))
+        
+        # Update layout for grouped bars
+        fig.update_layout(
+            barmode='group',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            title=dict(
+                text=f"Average Daily Sales by Region and Year{' - ' + selected_month if selected_month != 'All Months' else ''}{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - ' + selected_quarter if selected_quarter != 'All Quarters' else ''}",
+                x=0.5,
+                xanchor='center',
+                font=dict(color='#ff5722')
+            ),
+            xaxis=dict(
+                title='Average Daily Sales ($)',
+                gridcolor='rgba(255, 215, 0, 0.1)',
+                showgrid=True,
+                title_font=dict(color='#ffd700'),
+                tickfont=dict(color='#ffd700'),
+                tickformat='$,.0f'
+            ),
+            yaxis=dict(
+                title='Region',
+                showgrid=False,
+                automargin=True,
+                title_font=dict(color='#ffd700'),
+                tickfont=dict(color='#ffd700')
+            ),
+            font=dict(color='#ffd700'),
+            showlegend=True,
+            legend=dict(
+                title='',
+                yanchor="top",
+                y=0.99,
+                xanchor="right",
+                x=0.99,
+                font=dict(color='#ffd700')
+            ),
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=max(len(stats['Region'].unique()) * 100, 400)
+        )
+    else:
+        # If year is filtered, show single-year view
+        stats = summary_df.groupby('Region').agg({
+            'Daily Average': 'mean'
+        }).round(2).reset_index()
+        
+        stats = stats.sort_values('Daily Average', ascending=False)
+        stats['Daily Average Formatted'] = stats['Daily Average'].apply(lambda x: f"${x:,.2f}")
+        
+        # Display summary statistics
+        st.markdown(f"### Average Daily Sales by Region - Year {selected_year}")
+        st.dataframe(
+            stats[['Region', 'Daily Average Formatted']].rename(columns={'Daily Average Formatted': 'Average Daily Sales'}),
+            hide_index=True
+        )
+        
+        # Create visualization for single year
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            y=stats['Region'],
+            x=stats['Daily Average'],
+            orientation='h',
+            marker_color='#ffd700',
+            text=[f"${x:,.2f}" for x in stats['Daily Average']],
+            textposition='auto',
+        ))
+        
+        # Update layout for single year view
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            title=dict(
+                text=f"Average Daily Sales by Region - Year {selected_year}{' - ' + selected_month if selected_month != 'All Months' else ''}{' - ' + selected_week if selected_week != 'All Weeks' else ''}{' - ' + selected_quarter if selected_quarter != 'All Quarters' else ''}",
+                x=0.5,
+                xanchor='center',
+                font=dict(color='#ff5722')
+            ),
+            xaxis=dict(
+                title='Average Daily Sales ($)',
+                gridcolor='rgba(255, 215, 0, 0.1)',
+                showgrid=True,
+                title_font=dict(color='#ffd700'),
+                tickfont=dict(color='#ffd700'),
+                tickformat='$,.0f'
+            ),
+            yaxis=dict(
+                title='Region',
+                showgrid=False,
+                automargin=True,
+                title_font=dict(color='#ffd700'),
+                tickfont=dict(color='#ffd700')
+            ),
+            font=dict(color='#ffd700'),
+            showlegend=False,
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=max(len(stats) * 50, 400)
+        )
 
-    # Customize the chart
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis_title='Region',
-        yaxis_title='Total Sales ($)',
-        yaxis=dict(
-            tickformat='$,.0f',
-            gridcolor='rgba(255,255,255,0.1)'
-        ),
-        xaxis=dict(
-            gridcolor='rgba(255,255,255,0.1)'
-        ),
-        showlegend=True if 'Year' in time_comparison.columns else False,
-        legend=dict(
-            bgcolor='rgba(0,0,0,0)',
-            bordercolor='rgba(255,255,255,0.3)',
-            borderwidth=1
-        ),
-        hovermode='x unified'
-    )
-
-    # Update hover template
+    # Add hover template
     fig.update_traces(
         hovertemplate="<br>".join([
-            "Region: %{x}",
-            "Total Sales: %{y:$,.2f}",
+            "Region: %{y}",
+            "Average Daily Sales: %{text}",
             "<extra></extra>"
         ])
     )
 
+    # Add some spacing between table and chart
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     # Display the chart
     st.plotly_chart(fig, use_container_width=True)
 else:

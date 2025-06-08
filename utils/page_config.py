@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.theme import COLORS
 
 def set_page_config(title="Sales Ninja", emoji="📊"):
     """Configure the page with standard settings"""
@@ -27,59 +28,64 @@ def set_page_config(title="Sales Ninja", emoji="📊"):
 
 def add_page_title(title, subtitle=None, emoji="📊"):
     """Add a styled title to the page"""
-    # Custom CSS for enhanced styling
-    st.markdown("""
-    <style>
-        /* Main title styling */
-        .main-header {
-            background: linear-gradient(90deg, #0A2342 0%, #00B4D8 100%);
-            padding: 20px 20px 10px 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: 2px solid #00B4D8;
-        }
-        
-        .title-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-        }
-        
-        .main-title {
-            color: white;
-            font-size: 48px;
-            font-weight: 700;
-            margin: 0;
-            text-align: center;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        .title-emoji {
-            font-size: 40px;
-            margin-bottom: 5px;
-        }
-        
-        .subtitle {
-            color: #CAF0F8;
-            font-size: 20px;
-            text-align: center;
-            margin-top: 10px;
-            font-style: italic;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Enhanced header with title and subtitle
-    subtitle_html = f'<p class="subtitle">{subtitle}</p>' if subtitle else ''
+    # Add custom gradient header style
     st.markdown(f"""
-    <div class="main-header">
-        <div class="title-container">
-            <span class="title-emoji">{emoji}</span>
-            <h1 class="main-title">{title}</h1>
-            <span class="title-emoji">{emoji}</span>
+        <style>
+        .header-container {{
+            background: linear-gradient(135deg, #0c1c2c 0%, #1a3a4a 100%);
+            padding: 2rem 1rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            border: 2px solid rgba(255, 87, 34, 0.3);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }}
+        .header-container::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(255, 87, 34, 0.1) 0%,
+                rgba(244, 81, 30, 0.1) 50%,
+                rgba(230, 74, 25, 0.1) 100%
+            );
+            z-index: 1;
+        }}
+        .header-title {{
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: {COLORS['primary']};
+            margin: 0;
+            position: relative;
+            z-index: 2;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }}
+        .header-subtitle {{
+            font-size: 1.5rem;
+            color: {COLORS['accent']};
+            margin-top: 0.5rem;
+            font-style: italic;
+            position: relative;
+            z-index: 2;
+        }}
+        .header-emoji {{
+            font-size: 2.5rem;
+            margin: 0 0.5rem;
+            position: relative;
+            z-index: 2;
+        }}
+        </style>
+        <div class="header-container">
+            <h1 class="header-title">
+                {f'<span class="header-emoji">{emoji}</span>' if emoji else ''}
+                {title}
+                {f'<span class="header-emoji">{emoji}</span>' if emoji else ''}
+            </h1>
+            {f'<p class="header-subtitle">{subtitle}</p>' if subtitle else ''}
         </div>
-        {subtitle_html}
-    </div>
     """, unsafe_allow_html=True) 

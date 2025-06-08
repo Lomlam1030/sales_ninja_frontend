@@ -19,7 +19,7 @@ st.markdown("""
     .main-title {
         font-size: 4em !important;
         font-weight: bold;
-        background: linear-gradient(45deg, #2ecc71, #3498db);
+        background: linear-gradient(45deg, #ff5722, #ffa726);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         padding-bottom: 20px;
@@ -31,7 +31,7 @@ st.markdown("""
     }
     .feature-header {
         font-size: 1.8em !important;
-        color: #2ecc71;
+        color: #ff5722;
         margin-bottom: 1em;
     }
     .feature-text {
@@ -42,8 +42,8 @@ st.markdown("""
         text-align: center;
     }
     .feature-box {
-        background: rgba(46, 204, 113, 0.1);
-        border: 1px solid rgba(46, 204, 113, 0.3);
+        background: rgba(255, 87, 34, 0.1);
+        border: 1px solid rgba(255, 87, 34, 0.3);
         border-radius: 10px;
         padding: 1.5rem;
         margin: 1rem 0;
@@ -51,7 +51,7 @@ st.markdown("""
     }
     .feature-box:hover {
         transform: translateY(-5px);
-        box-shadow: 0 5px 15px rgba(46, 204, 113, 0.2);
+        box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
     }
 </style>
 """, unsafe_allow_html=True)

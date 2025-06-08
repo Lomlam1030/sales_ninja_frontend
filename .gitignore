@@ -2,17 +2,20 @@
 data/*.csv
 data/*.csvZone.Identifier
 
-# Python
+# Virtual Environment
+sales_venv/
+venv/
+env/
+
+# Python cache files
 __pycache__/
 *.py[cod]
 *$py.class
-.env
-.venv
-env/
-venv/
-ENV/
 
-# IDE
+# Environment variables
+.env
+
+# IDE settings
 .vscode/
 .idea/
 

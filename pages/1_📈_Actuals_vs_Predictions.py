@@ -21,7 +21,7 @@ from utils.sales_calculations import (
 # Configure the page
 set_page_config(title="Home")
 
-# Custom CSS for blue tabs
+# Custom CSS for red/orange tabs
 st.markdown("""
     <style>
         div[data-baseweb="tab-list"] {
@@ -31,20 +31,26 @@ st.markdown("""
         button[data-baseweb="tab"] {
             padding: 10px 24px;
             margin: 0px 8px;
-            background-color: #1e2f4d;
+            background-color: #4a1c14;  /* Dark brown-red background */
             border-radius: 4px;
+            border: 1px solid rgba(196, 30, 58, 0.2);  /* Dark red border */
+            transition: all 0.3s ease;
+            color: #fafafa;
         }
         
         button[data-baseweb="tab"]:hover {
-            background-color: #2c446e;
+            background-color: #6b2920;  /* Slightly lighter brown-red on hover */
+            border-color: rgba(196, 30, 58, 0.4);
         }
         
         button[data-baseweb="tab"][aria-selected="true"] {
-            background-color: #000080;
+            background-color: #8b0000;  /* Dark red for active tab */
+            border-color: #c41e3a;
+            box-shadow: 0 2px 4px rgba(196, 30, 58, 0.3);
         }
         
         div[role="tablist"] button[role="tab"]:hover {
-            color: #87CEEB;
+            color: #ffd700;  /* Gold on hover */
         }
     </style>
 """, unsafe_allow_html=True)
@@ -76,7 +82,7 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
         x=actual_data['date'],
         y=actual_data['net_sales'],
         name='Actual Sales',
-        line=dict(color='#000080', width=2),  # Navy blue
+        line=dict(color='#c41e3a', width=2),  # Dark red (cardinal red) for actuals
         hovertemplate='%{x}<br>Actual Sales: %{y:$,.0f}<extra></extra>'
     ))
     
@@ -85,7 +91,7 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
         x=predicted_data['date'],
         y=predicted_data['net_sales'],
         name='Predicted Sales',
-        line=dict(color='#87CEEB', width=2, dash='dot'),  # Light blue
+        line=dict(color='#ffd700', width=2, dash='dot'),  # Gold/yellow for predictions
         hovertemplate='%{x}<br>Predicted Sales: %{y:$,.0f}<extra></extra>'
     ))
     
@@ -96,7 +102,7 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
     fig.add_hline(
         y=actual_avg,
         line_dash="dot",
-        line_color="rgba(0, 0, 128, 0.5)",  # Semi-transparent navy blue
+        line_color="rgba(196, 30, 58, 0.5)",  # Semi-transparent dark red
         annotation_text=f"Actual Avg: {format_currency(actual_avg)}",
         annotation_position="bottom right"
     )
@@ -104,7 +110,7 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
     fig.add_hline(
         y=predicted_avg,
         line_dash="dot",
-        line_color="rgba(135, 206, 235, 0.5)",  # Semi-transparent light blue
+        line_color="rgba(255, 215, 0, 0.5)",  # Semi-transparent gold
         annotation_text=f"Predicted Avg: {format_currency(predicted_avg)}",
         annotation_position="top right"
     )
@@ -117,7 +123,9 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
         showlegend=True,
         height=500,
         template="plotly_dark",
-        hovermode='x unified'
+        hovermode='x unified',
+        title_font_color='#ff5722',  # Deep orange for title
+        font_color='#f4511e'  # Darker orange for other text
     )
     
     return fig
