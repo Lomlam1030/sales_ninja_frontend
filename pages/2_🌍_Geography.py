@@ -6,6 +6,8 @@ import json
 import branca.colormap as cm
 from pathlib import Path
 from utils.page_config import set_page_config, add_page_title
+import plotly.express as px
+import plotly.graph_objects as go
 
 # Configure the page
 set_page_config(title="Geography")
@@ -276,9 +278,12 @@ else:  # Quarterly View
 
 # Debug information in sidebar
 st.sidebar.write("Current view:", period_label)
-st.sidebar.write("Number of records:", len(display_df))
+st.sidebar.write("Number of Countries:", len(display_df['country'].unique()))
 if len(display_df) > 0:
-    st.sidebar.write("Sample values:", display_df['net_sales'].head())
+    st.sidebar.write("Sample Countries:", ", ".join(display_df['country'].head().tolist()))
+
+# Add debug information for columns
+st.sidebar.write("Available columns:", list(table_df.columns))
 
 # Map section
 st.markdown('<div class="map-section">', unsafe_allow_html=True)
@@ -308,8 +313,8 @@ if geo_data:
         max_zoom=6
     )
     
-    # Use display_df directly since it's already aggregated properly
-    country_sales = display_df
+    # Calculate sales by country
+    country_sales = display_df.copy()
     
     # Create color scale
     min_sales = country_sales['net_sales'].min()
@@ -429,28 +434,12 @@ st.markdown("""
 <h2 class="table-header">📊 Sales by Country</h2>
 """, unsafe_allow_html=True)
 
-# Prepare the table data
-table_data = table_df.copy()
-table_data = table_data.sort_values('avg_sales', ascending=False)
-
-# Format the sales columns
-def format_currency(value):
-    if value >= 1e9:
-        return f"${value/1e9:.2f}B"
-    elif value >= 1e6:
-        return f"${value/1e6:.2f}M"
-    else:
-        return f"${value:,.2f}"
-
-table_data['Average Sales'] = table_data['avg_sales'].apply(format_currency)
-table_data['Total Sales'] = table_data['total_sales'].apply(format_currency)
-
 # Add filters above the table
 st.markdown('<div class="filter-section">', unsafe_allow_html=True)
 col1, col2 = st.columns(2)
 
 # Create filtered dataset
-filtered_data = table_data.copy()
+filtered_data = table_df.copy()
 
 # Get unique continents and sort them
 continents = sorted(filtered_data['continent'].unique())
@@ -466,28 +455,28 @@ if selected_continent != "All Continents":
 
 # Get available countries based on current filter
 available_countries = sorted(filtered_data['country'].unique())
-selected_country = col2.selectbox(
-    "Select Country",
-    ["All Countries"] + available_countries,
+selected_countries = col2.multiselect(
+    "Select Countries",
+    available_countries,
+    default=[],
     key="country_filter"
 )
 
 # Apply country filter
-if selected_country != "All Countries":
-    filtered_data = filtered_data[filtered_data['country'] == selected_country]
+if selected_countries:
+    filtered_data = filtered_data[filtered_data['country'].isin(selected_countries)]
 
 # Format the sales columns for the filtered data
+def format_currency(value):
+    if value >= 1e9:
+        return f"${value/1e9:.2f}B"
+    elif value >= 1e6:
+        return f"${value/1e6:.2f}M"
+    else:
+        return f"${value:,.2f}"
+
 filtered_data['Average Sales'] = filtered_data['avg_sales'].apply(format_currency)
 filtered_data['Total Sales'] = filtered_data['total_sales'].apply(format_currency)
-
-# Debug information
-with st.expander("Debug Information"):
-    st.write("Selected continent:", selected_continent)
-    st.write("Selected country:", selected_country)
-    st.write("Number of records after filtering:", len(filtered_data))
-    if len(filtered_data) > 0:
-        st.write("Sample of filtered data:")
-        st.write(filtered_data[['continent', 'country', 'avg_sales', 'total_sales']].head())
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -539,35 +528,220 @@ st.dataframe(
     }
 )
 
-# Display metrics with proper formatting
+# Calculate KPIs based on filtered data
+def calculate_kpis(data, continent_filter, country_filters):
+    if country_filters:
+        # Use selected countries
+        filtered_data = data[data['country'].isin(country_filters)]
+        num_countries = len(country_filters)
+        region_type = "Selected Countries"
+    elif continent_filter != "All Continents":
+        # Use selected continent
+        filtered_data = data[data['continent'] == continent_filter]
+        num_countries = len(filtered_data['country'].unique())
+        region_type = continent_filter
+    else:
+        # Use all data
+        filtered_data = data
+        num_countries = len(filtered_data['country'].unique())
+        region_type = "All Continents"
+    
+    avg_sales = filtered_data['avg_sales'].mean()
+    total_sales = filtered_data['total_sales'].sum()
+    
+    # Format the average sales
+    if avg_sales >= 1e9:
+        formatted_avg = f"${avg_sales/1e9:.2f}B"
+    elif avg_sales >= 1e6:
+        formatted_avg = f"${avg_sales/1e6:.2f}M"
+    else:
+        formatted_avg = f"${avg_sales:,.2f}"
+    
+    # Format the total sales
+    if total_sales >= 1e9:
+        formatted_total = f"${total_sales/1e9:.2f}B"
+    elif total_sales >= 1e6:
+        formatted_total = f"${total_sales/1e6:.2f}M"
+    else:
+        formatted_total = f"${total_sales:,.2f}"
+    
+    return formatted_avg, formatted_total, num_countries, region_type
+
+# Get KPI values
+avg_sales, total_sales, num_countries, region_type = calculate_kpis(
+    table_df,
+    selected_continent,
+    selected_countries
+)
+
+# Create three columns for KPIs
 col1, col2, col3 = st.columns(3)
 
+# KPI 1: Average Sales
 with col1:
-    avg_total_sales = display_df['net_sales'].mean()
-    formatted_total = f"${avg_total_sales/1e9:.2f}B" if avg_total_sales >= 1e9 else (
-        f"${avg_total_sales/1e6:.2f}M" if avg_total_sales >= 1e6 else f"${avg_total_sales:,.2f}"
-    )
     st.metric(
         f"Average Net Sales per {period_label}",
-        formatted_total
+        avg_sales,
+        help=region_type
     )
 
+# KPI 2: Total Sales
 with col2:
-    num_countries = len(display_df['country'].unique())
+    st.metric(
+        f"Total Net Sales (All {period_label}s)",
+        total_sales,
+        help=region_type
+    )
+
+# KPI 3: Number of Countries
+with col3:
     st.metric(
         "Number of Countries",
-        f"{num_countries:,}"
+        num_countries,
+        help=region_type
     )
 
-with col3:
-    top_country_data = display_df.nlargest(1, 'net_sales')
-    top_country = top_country_data['country'].iloc[0]
-    top_sales = top_country_data['net_sales'].iloc[0]
-    formatted_top = f"${top_sales/1e9:.2f}B" if top_sales >= 1e9 else (
-        f"${top_sales/1e6:.2f}M" if top_sales >= 1e6 else f"${top_sales:,.2f}"
-    )
-    st.metric(
-        f"Top Country (per {period_label})",
-        f"{top_country}",
-        f"{formatted_top}"
-    ) 
+# Add bar chart section
+st.markdown("""
+<h2 class="table-header">📊 Sales Comparison</h2>
+""", unsafe_allow_html=True)
+
+# Prepare data for bar chart based on filters
+def prepare_bar_chart_data(data, continent_filter, country_filters):
+    if country_filters:
+        # Show selected countries
+        chart_data = data[data['country'].isin(country_filters)].copy()
+        group_by = 'country'
+        title = f"Average Sales by Country"
+    elif continent_filter != "All Continents":
+        # Show countries in selected continent
+        chart_data = data[data['continent'] == continent_filter].copy()
+        group_by = 'country'
+        title = f"Average Sales by Country in {continent_filter}"
+    else:
+        # Show all continents
+        chart_data = data.copy()
+        group_by = 'continent'
+        title = "Average Sales by Continent"
+    
+    # Group and calculate averages
+    agg_data = chart_data.groupby(group_by)['avg_sales'].mean().reset_index()
+    agg_data = agg_data.sort_values('avg_sales', ascending=True)  # Sort for better visualization
+    
+    return agg_data, title, group_by
+
+# Get aggregated data for bar chart
+agg_data, chart_title, group_by = prepare_bar_chart_data(
+    table_df, 
+    selected_continent, 
+    selected_countries
+)
+
+# Create bar chart
+fig = go.Figure()
+
+# Add bars
+fig.add_trace(go.Bar(
+    x=agg_data['avg_sales'],
+    y=agg_data[group_by],
+    orientation='h',
+    marker_color='#2ecc71',
+    text=[f"${x:,.2f}" for x in agg_data['avg_sales']],  # Format as currency
+    textposition='auto',
+))
+
+# Update layout
+fig.update_layout(
+    title=dict(
+        text=f"{chart_title} (per {period_label})",
+        x=0.5,
+        xanchor='center'
+    ),
+    xaxis_title="Average Sales ($)",
+    yaxis_title=group_by.title(),
+    height=max(len(agg_data) * 50, 400),  # Dynamic height based on number of bars
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='#2ecc71'),
+    showlegend=False,
+    margin=dict(l=20, r=20, t=40, b=20),
+    xaxis=dict(
+        showgrid=True,
+        gridcolor='rgba(46, 204, 113, 0.1)',
+        tickformat="$,.2f"  # Format as currency
+    ),
+    yaxis=dict(
+        showgrid=False,
+        automargin=True
+    ),
+    bargap=0.2
+)
+
+# Display the chart
+st.plotly_chart(fig, use_container_width=True)
+
+# Add time comparison table
+st.markdown("""
+<h2 class="table-header">⏱️ Time Comparison</h2>
+""", unsafe_allow_html=True)
+
+# Prepare time comparison data
+def prepare_time_comparison(data, continent_filter, country_filters, period):
+    if country_filters:
+        comparison_data = data[data['country'].isin(country_filters)].copy()
+        group_cols = ['country']
+    elif continent_filter != "All Continents":
+        comparison_data = data[data['continent'] == continent_filter].copy()
+        group_cols = ['country']
+    else:
+        comparison_data = data.copy()
+        group_cols = ['continent']
+    
+    # Calculate period averages
+    period_avg = comparison_data.groupby(group_cols)['avg_sales'].mean().reset_index()
+    period_total = comparison_data.groupby(group_cols)['total_sales'].sum().reset_index()
+    
+    # Format currencies
+    period_avg['Average per ' + period] = period_avg['avg_sales'].apply(format_currency)
+    period_total['Total All ' + period + 's'] = period_total['total_sales'].apply(format_currency)
+    
+    # Merge and clean up
+    final_data = period_avg.merge(period_total, on=group_cols)
+    final_data = final_data.drop(['avg_sales', 'total_sales'], axis=1)
+    
+    # Rename columns
+    if 'country' in group_cols:
+        final_data = final_data.rename(columns={'country': 'Region'})
+    else:
+        final_data = final_data.rename(columns={'continent': 'Region'})
+    
+    return final_data
+
+# Get time comparison data
+time_comparison = prepare_time_comparison(
+    table_df,
+    selected_continent,
+    selected_countries,
+    period_label
+)
+
+# Display time comparison table
+st.dataframe(
+    time_comparison,
+    hide_index=True,
+    height=min(max((len(time_comparison) + 1) * 35, 200), 400),
+    column_config={
+        "Region": st.column_config.TextColumn(
+            "Region",
+            width="medium"
+        ),
+        f"Average per {period_label}": st.column_config.TextColumn(
+            f"Average per {period_label}",
+            width="large"
+        ),
+        f"Total All {period_label}s": st.column_config.TextColumn(
+            f"Total All {period_label}s",
+            width="large"
+        )
+    }
+) 
