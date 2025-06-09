@@ -714,4 +714,5 @@ if len(map_aggregated_data) > 0:
 
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("No data available for the selected filters.") 
+        st.warning("No data available for the selected filters.")
+        st.warning("Need both promotional and non-promotional data for comparison. Current distribution:\n\nPromotional transactions: 5\nNon-promotional transactions: 0\nUnable to calculate promotional impact. Please check the data or filters.")

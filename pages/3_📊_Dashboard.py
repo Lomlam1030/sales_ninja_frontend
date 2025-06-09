@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from utils.page_config import set_page_config, add_page_title
+from utils.data_queries import get_daily_sales, get_kpi_metrics, get_promotion_impact
+from google.cloud import bigquery
 
 # Configure the page
 set_page_config(title="Dashboard")
@@ -25,25 +27,8 @@ COLOR_SCHEME = {
     'background': 'rgba(255, 244, 230, 0.1)'  # Light warm background
 }
 
-def generate_sample_data():
-    dates = pd.date_range(start='2023-01-01', end='2023-12-31', freq='D')
-    np.random.seed(42)
-    
-    data = pd.DataFrame({
-        'date': dates,
-        'net_sales': np.random.normal(10000, 2000, len(dates)),
-        'sales_volume': np.random.normal(500, 100, len(dates)),
-        'has_promotion': np.random.choice([True, False], len(dates), p=[0.3, 0.7])
-    })
-    
-    # Increase sales for promotional days
-    data.loc[data['has_promotion'], 'net_sales'] *= 1.4
-    data.loc[data['has_promotion'], 'sales_volume'] *= 1.5
-    
-    return data
-
-# Load data
-data = generate_sample_data()
+# Initialize BigQuery client
+client = bigquery.Client()
 
 # Dashboard Title
 st.markdown("""<h1 class="dashboard-header">Sales Performance Dashboard</h1>""", unsafe_allow_html=True)
@@ -51,178 +36,163 @@ st.markdown("""<h1 class="dashboard-header">Sales Performance Dashboard</h1>""",
 # Date Range Filter
 col1, col2 = st.columns(2)
 with col1:
-    start_date = st.date_input("Start Date", data['date'].min())
+    start_date = st.date_input("Start Date", datetime(2007, 1, 1))
 with col2:
-    end_date = st.date_input("End Date", data['date'].max())
+    end_date = st.date_input("End Date", datetime(2009, 12, 31))
 
-# Filter data based on date range
-filtered_data = data[(data['date'].dt.date >= start_date) & (data['date'].dt.date <= end_date)]
+try:
+    # Get data from BigQuery
+    filtered_data = get_daily_sales(start_date, end_date)
+    kpi_data = get_kpi_metrics(start_date, end_date)
+    promo_data = get_promotion_impact(start_date, end_date)
 
-# Update KPI metrics styling
-st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
-        padding: 20px;
-        border-radius: 10px;
-        margin: 10px 0;
-        border: 1px solid rgba(255, 140, 0, 0.2);
-    ">
-    <h2 class="metric-header">Key Performance Indicators</h2>
-    </div>
-""", unsafe_allow_html=True)
+    # Update KPI metrics styling
+    st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border: 1px solid rgba(255, 140, 0, 0.2);
+        ">
+        <h2 class="metric-header">Key Performance Indicators</h2>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Calculate KPIs
-total_net_sales = filtered_data['net_sales'].sum()
-total_volume = filtered_data['sales_volume'].sum()
-avg_net_sales = filtered_data['net_sales'].mean()
-avg_volume = filtered_data['sales_volume'].mean()
+    # Display KPIs in columns
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-# Display KPIs in columns
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with kpi1:
+        st.metric("Total Net Sales", f"${kpi_data['total_net_sales'].iloc[0]:,.2f}")
+    with kpi2:
+        st.metric("Total Sales Volume", f"{kpi_data['total_volume'].iloc[0]:,.0f}")
+    with kpi3:
+        st.metric("Total Transactions", f"{kpi_data['total_transactions'].iloc[0]:,.0f}")
+    with kpi4:
+        st.metric("Avg Transaction Value", f"${kpi_data['avg_transaction_value'].iloc[0]:,.2f}")
 
-with kpi1:
-    st.metric("Total Net Sales", f"${total_net_sales:,.2f}")
-with kpi2:
-    st.metric("Total Sales Volume", f"{total_volume:,.0f}")
-with kpi3:
-    st.metric("Avg Daily Net Sales", f"${avg_net_sales:,.2f}")
-with kpi4:
-    st.metric("Avg Daily Volume", f"{avg_volume:,.0f}")
+    # Promotional Impact Analysis
+    st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 140, 0, 0.2);
+        ">
+        <h2 class="analysis-header">Promotional Impact Analysis</h2>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Promotional Impact Analysis
-st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
-        padding: 20px;
-        border-radius: 10px;
-        margin: 20px 0;
-        border: 1px solid rgba(255, 140, 0, 0.2);
-    ">
-    <h2 class="analysis-header">Promotional Impact Analysis</h2>
-    </div>
-""", unsafe_allow_html=True)
+    # Calculate promotional impact
+    promo_metrics = []
+    for metric in ['total_sales', 'avg_sale_value', 'total_volume', 'avg_volume', 'transaction_count']:
+        promo_val = promo_data[promo_data['has_promotion']][metric].iloc[0]
+        non_promo_val = promo_data[~promo_data['has_promotion']][metric].iloc[0]
+        lift = ((promo_val - non_promo_val) / non_promo_val) * 100
+        promo_metrics.append({
+            'Metric': metric.replace('_', ' ').title(),
+            'Promotional': promo_val,
+            'Non-Promotional': non_promo_val,
+            'Lift %': lift
+        })
 
-# Calculate metrics by promotion status
-promo_analysis = filtered_data.groupby('has_promotion').agg({
-    'net_sales': ['mean', 'sum', 'count'],
-    'sales_volume': ['mean', 'sum']
-}).round(2)
+    promo_impact = pd.DataFrame(promo_metrics)
 
-# Create comparison metrics
-promo_impact = pd.DataFrame({
-    'Metric': ['Average Daily Net Sales', 'Average Daily Volume'],
-    'With Promotion': [
-        promo_analysis.loc[True, ('net_sales', 'mean')],
-        promo_analysis.loc[True, ('sales_volume', 'mean')]
-    ],
-    'Without Promotion': [
-        promo_analysis.loc[False, ('net_sales', 'mean')],
-        promo_analysis.loc[False, ('sales_volume', 'mean')]
-    ]
-})
+    # Display promotional metrics
+    col1, col2 = st.columns(2)
 
-promo_impact['Lift %'] = ((promo_impact['With Promotion'] - promo_impact['Without Promotion']) / 
-                         promo_impact['Without Promotion'] * 100).round(2)
+    with col1:
+        # Create comparison table
+        fig_table = go.Figure(data=[go.Table(
+            header=dict(
+                values=['Metric', 'Promotional', 'Non-Promotional'],
+                fill_color='rgba(255, 140, 0, 0.1)',
+                align='left'
+            ),
+            cells=dict(
+                values=[
+                    promo_impact['Metric'],
+                    promo_impact['Promotional'].apply(lambda x: f"${x:,.2f}" if 'value' in str(promo_impact['Metric']).lower() else f"{x:,.0f}"),
+                    promo_impact['Non-Promotional'].apply(lambda x: f"${x:,.2f}" if 'value' in str(promo_impact['Metric']).lower() else f"{x:,.0f}")
+                ],
+                align='left'
+            )
+        )])
+        st.plotly_chart(fig_table, use_container_width=True)
 
-# Display promotional impact
-col1, col2 = st.columns([2, 1])
+    with col2:
+        # Display impact metrics
+        st.markdown("### Promotional Lift")
+        for idx, row in promo_impact.iterrows():
+            st.metric(
+                row['Metric'],
+                f"{row['Lift %']:+.2f}%",
+                delta_color="normal"
+            )
 
-with col1:
-    # Update the promotional impact chart colors
-    fig = go.Figure(data=[
-        go.Bar(
-            name='With Promotion',
-            x=promo_impact['Metric'],
-            y=promo_impact['With Promotion'],
-            marker_color='#FF4B4B'  # Red
+    # Time Series Analysis
+    st.markdown("""<h2 class="analysis-header">Time Series Analysis</h2>""", unsafe_allow_html=True)
+
+    # Create time series plots
+    fig_time = go.Figure()
+
+    # Update the time series chart colors
+    fig_time.add_trace(go.Scatter(
+        x=filtered_data['date'],
+        y=filtered_data['total_net_sales'],
+        name='Net Sales',
+        line=dict(color='#FF4B4B', width=2)  # Red
+    ))
+
+    fig_time.add_trace(go.Scatter(
+        x=filtered_data['date'],
+        y=filtered_data['total_volume'],
+        name='Sales Volume',
+        line=dict(color='#FFD700', width=2),  # Gold
+        yaxis='y2'
+    ))
+
+    fig_time.update_layout(
+        title='Net Sales and Volume Over Time',
+        xaxis=dict(
+            title='Date',
+            gridcolor='rgba(255, 140, 0, 0.1)',
+            title_font_color='#FF8C00'
         ),
-        go.Bar(
-            name='Without Promotion',
-            x=promo_impact['Metric'],
-            y=promo_impact['Without Promotion'],
-            marker_color='#FF8C00'  # Dark Orange
-        )
-    ])
-    
-    fig.update_layout(
-        title='Sales Metrics: Promotional vs Non-Promotional',
-        barmode='group',
+        yaxis=dict(
+            title='Net Sales ($)',
+            titlefont=dict(color='#FF4B4B'),
+            tickfont=dict(color='#FF4B4B'),
+            gridcolor='rgba(255, 75, 75, 0.1)'
+        ),
+        yaxis2=dict(
+            title='Sales Volume',
+            titlefont=dict(color='#FFD700'),
+            tickfont=dict(color='#FFD700'),
+            overlaying='y',
+            side='right',
+            gridcolor='rgba(255, 215, 0, 0.1)'
+        ),
         plot_bgcolor='rgba(255, 244, 230, 0.1)',
         paper_bgcolor='rgba(255, 244, 230, 0)',
-        height=400,
-        font={'color': '#2C3E50'},
-        title_font_color='#FF4B4B'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # Display impact metrics
-    st.markdown("### Promotional Lift")
-    for idx, row in promo_impact.iterrows():
-        st.metric(
-            row['Metric'],
-            f"{row['Lift %']:+.2f}%",
-            delta_color="normal"
+        height=500,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color='#2C3E50')
         )
-
-# Time Series Analysis
-st.markdown("""<h2 class="analysis-header">Time Series Analysis</h2>""", unsafe_allow_html=True)
-
-# Create time series plots
-fig_time = go.Figure()
-
-# Update the time series chart colors
-fig_time.add_trace(go.Scatter(
-    x=filtered_data['date'],
-    y=filtered_data['net_sales'],
-    name='Net Sales',
-    line=dict(color='#FF4B4B', width=2)  # Red
-))
-
-fig_time.add_trace(go.Scatter(
-    x=filtered_data['date'],
-    y=filtered_data['sales_volume'],
-    name='Sales Volume',
-    line=dict(color='#FFD700', width=2),  # Gold
-    yaxis='y2'
-))
-
-fig_time.update_layout(
-    title='Net Sales and Volume Over Time',
-    xaxis=dict(
-        title='Date',
-        gridcolor='rgba(255, 140, 0, 0.1)',
-        title_font_color='#FF8C00'
-    ),
-    yaxis=dict(
-        title='Net Sales ($)',
-        titlefont=dict(color='#FF4B4B'),
-        tickfont=dict(color='#FF4B4B'),
-        gridcolor='rgba(255, 75, 75, 0.1)'
-    ),
-    yaxis2=dict(
-        title='Sales Volume',
-        titlefont=dict(color='#FFD700'),
-        tickfont=dict(color='#FFD700'),
-        overlaying='y',
-        side='right',
-        gridcolor='rgba(255, 215, 0, 0.1)'
-    ),
-    plot_bgcolor='rgba(255, 244, 230, 0.1)',
-    paper_bgcolor='rgba(255, 244, 230, 0)',
-    height=500,
-    showlegend=True,
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1,
-        font=dict(color='#2C3E50')
     )
-)
 
-st.plotly_chart(fig_time, use_container_width=True)
+    st.plotly_chart(fig_time, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Error loading dashboard data: {str(e)}")
+    st.info("Please check your BigQuery connection and try again.")
 
 # Update the CSS styling
 st.markdown("""
