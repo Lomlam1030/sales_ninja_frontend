@@ -70,15 +70,30 @@ def get_chart_template():
             'plot_bgcolor': 'rgba(0,0,0,0)',
             'paper_bgcolor': 'rgba(0,0,0,0)',
             'font': {
-                'color': COLORS['text']
+                'color': '#191970',  # Midnight Blue
+                'size': 12
+            },
+            'title': {
+                'font': {
+                    'color': '#191970',  # Midnight Blue
+                    'size': 16,
+                    'weight': 600
+                }
             },
             'xaxis': {
-                'gridcolor': 'rgba(255,255,255,0.1)',
-                'zerolinecolor': 'rgba(255,255,255,0.2)'
+                'title_font': {'color': '#191970', 'size': 14},  # Midnight Blue
+                'tickfont': {'color': '#191970', 'size': 12},  # Midnight Blue
+                'gridcolor': 'rgba(65, 105, 225, 0.1)',  # Royal Blue with opacity
+                'zerolinecolor': 'rgba(65, 105, 225, 0.2)'  # Royal Blue with opacity
             },
             'yaxis': {
-                'gridcolor': 'rgba(255,255,255,0.1)',
-                'zerolinecolor': 'rgba(255,255,255,0.2)'
+                'title_font': {'color': '#191970', 'size': 14},  # Midnight Blue
+                'tickfont': {'color': '#191970', 'size': 12},  # Midnight Blue
+                'gridcolor': 'rgba(65, 105, 225, 0.1)',  # Royal Blue with opacity
+                'zerolinecolor': 'rgba(65, 105, 225, 0.2)'  # Royal Blue with opacity
+            },
+            'legend': {
+                'font': {'color': '#191970', 'size': 12}  # Midnight Blue
             }
         }
     }
@@ -86,68 +101,141 @@ def get_chart_template():
 # CSS for consistent styling across pages
 def get_css():
     """Return CSS styles for consistent page styling"""
-    return f"""
+    return """
     <style>
-    .container {{
-        {STYLES['container']}
-    }}
-    .container:hover {{
-        {STYLES['container_hover']}
-    }}
-    .metric-container {{
-        {STYLES['metric']}
-    }}
-    .metric-container:hover {{
-        {STYLES['metric_hover']}
-    }}
-    .title {{
-        color: {COLORS['primary']};
-        font-size: 42px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }}
-    .subtitle {{
-        color: {COLORS['text']};
-        font-size: 20px;
-        margin-bottom: 30px;
-    }}
-    .info-text {{
-        color: {COLORS['info']};
-    }}
-    .success-text {{
-        color: {COLORS['success']};
-    }}
-    .warning-text {{
-        color: {COLORS['warning']};
-    }}
-    .error-text {{
-        color: {COLORS['error']};
-    }}
-    /* Remove all vertical lines */
-    [data-testid="stSidebar"] > div:first-child,
-    [data-testid="stSidebarNav"] > ul,
-    [data-testid="stSidebarNav"] > ul > li > div,
-    [data-testid="stSidebarNav"] > ul > li > a,
-    .block-container,
-    .element-container,
-    .stMarkdown,
-    .stMarkdown h1,
-    .stMarkdown h2,
-    .stMarkdown h3,
-    section[data-testid="stSidebar"],
-    .main .block-container {{
-        border-left: none !important;
-        border-right: none !important;
-        padding-left: 0 !important;
-    }}
-    /* Add spacing between sidebar and main content */
-    section[data-testid="stSidebar"] {{
-        padding-right: 1rem !important;
-        margin-right: 1rem !important;
-    }}
-    .main .block-container {{
-        padding-left: 2rem !important;
-        margin-left: 1rem !important;
-    }}
+        /* Base text colors */
+        .stMarkdown, p, .stText {
+            color: #9370DB !important;  /* Medium Purple - darker shade of lavender */
+        }
+        
+        /* Metric labels and values */
+        [data-testid="stMetricLabel"] {
+            color: #4169E1 !important;  /* Royal Blue */
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: #191970 !important;  /* Midnight Blue */
+            font-size: 1.8rem !important;
+            font-weight: 600 !important;
+        }
+        
+        /* Headers */
+        .section-header {
+            color: #191970 !important;  /* Midnight Blue */
+            font-size: 1.5em !important;
+            font-weight: 600 !important;
+            margin: 1em 0 !important;
+            padding: 0.5em 0 !important;
+            border-bottom: 2px solid rgba(147, 112, 219, 0.3) !important;
+        }
+        
+        /* Filter area styling */
+        .stSelectbox label, .stMultiSelect label, .stSlider label {
+            color: #191970 !important;  /* Midnight Blue */
+            font-weight: 600 !important;
+            font-size: 1rem !important;
+        }
+        .stSelectbox > div > div[data-baseweb="select"] > div, 
+        .stMultiSelect > div > div[data-baseweb="select"] > div,
+        .stSelectbox > div > div > div[role="listbox"],
+        .stMultiSelect > div > div > div[role="listbox"] {
+            color: #191970 !important;  /* Midnight Blue */
+            font-weight: 500 !important;
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }
+        /* Filter options styling */
+        div[role="option"] {
+            color: #191970 !important;  /* Midnight Blue */
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }
+        div[role="option"]:hover {
+            background-color: rgba(65, 105, 225, 0.1) !important;
+        }
+        /* Selected option styling */
+        div[aria-selected="true"] {
+            background-color: rgba(65, 105, 225, 0.2) !important;
+            color: #191970 !important;  /* Midnight Blue */
+            font-weight: 600 !important;
+        }
+        
+        /* Tabs styling */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 1em;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 1em;
+            border-radius: 0.5em;
+        }
+        .stTabs [data-baseweb="tab"],
+        .stTabs [data-baseweb="tab"] span {
+            height: 3em;
+            white-space: pre-wrap;
+            background-color: #4169E1 !important;  /* Royal Blue */
+            border-radius: 0.5em;
+            color: #FFFFFF !important;  /* White */
+            font-size: 1em;
+            font-weight: 600;
+            border: none;
+            padding: 0 1em;
+            transition: all 0.3s ease;
+        }
+        .stTabs [data-baseweb="tab"]:hover,
+        .stTabs [data-baseweb="tab"]:hover span {
+            background-color: #6A5ACD !important;  /* Slate Blue */
+            color: #FFFFFF !important;  /* White */
+        }
+        .stTabs [aria-selected="true"],
+        .stTabs [aria-selected="true"] span {
+            background-color: #191970 !important;  /* Midnight Blue */
+            color: #FFFFFF !important;  /* White */
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        /* Override any other text colors in tabs */
+        .stTabs [data-baseweb="tab"] * {
+            color: #FFFFFF !important;
+        }
+        
+        /* Table headers and cells */
+        .table-header {
+            color: #191970 !important;  /* Midnight Blue */
+            font-size: 1.5em !important;
+            font-weight: 600 !important;
+            margin: 1em 0 !important;
+        }
+        [data-testid="stDataFrameResizable"] {
+            color: #4169E1 !important;  /* Royal Blue */
+        }
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: rgba(25, 25, 112, 0.3);
+            border-right: 1px solid rgba(147, 112, 219, 0.2);
+        }
+        [data-testid="stSidebar"] .stMarkdown {
+            color: #4169E1 !important;  /* Royal Blue */
+            font-weight: 600 !important;
+        }
+        [data-testid="stSidebar"] .stSelectbox label,
+        [data-testid="stSidebar"] .stMultiSelect label {
+            color: #4169E1 !important;  /* Royal Blue */
+        }
+        [data-testid="stSidebar"] .stSelectbox > div > div[data-baseweb="select"] > div,
+        [data-testid="stSidebar"] .stMultiSelect > div > div[data-baseweb="select"] > div {
+            color: #191970 !important;  /* Midnight Blue */
+            background-color: rgba(255, 255, 255, 0.9) !important;
+        }
+        
+        /* Buttons */
+        .stButton > button {
+            background-color: rgba(65, 105, 225, 0.2) !important;
+            color: #191970 !important;  /* Midnight Blue */
+            border: 1px solid rgba(147, 112, 219, 0.3) !important;
+            font-weight: 600 !important;
+        }
+        .stButton > button:hover {
+            background-color: rgba(65, 105, 225, 0.4) !important;
+            border: 1px solid rgba(147, 112, 219, 0.5) !important;
+        }
     </style>
     """ 

@@ -289,23 +289,35 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
         y=actual_avg,
         line_dash="dot",
         line_color="rgba(65, 105, 225, 0.5)",  # Royal Blue
-        annotation_text=f"Actual Avg: {format_currency(actual_avg)}",
-        annotation_position="bottom right"
+        annotation=dict(
+            text=f"Actual Avg: {format_currency(actual_avg)}",
+            font=dict(color='#FFFFFF'),  # White text
+            xref="paper",
+            x=1,
+            showarrow=False,
+            yshift=10
+        )
     )
     
     fig.add_hline(
         y=predicted_avg,
         line_dash="dot",
         line_color="rgba(147, 112, 219, 0.5)",  # Medium Purple
-        annotation_text=f"Predicted Avg: {format_currency(predicted_avg)}",
-        annotation_position="top right"
+        annotation=dict(
+            text=f"Predicted Avg: {format_currency(predicted_avg)}",
+            font=dict(color='#FFFFFF'),  # White text
+            xref="paper",
+            x=1,
+            showarrow=False,
+            yshift=-10
+        )
     )
     
-    # Update layout with strict container bounds
+    # Update layout with strict container bounds and adjusted margins
     fig.update_layout(
         title=dict(
             text=title,
-            font=dict(color='#E6E6FA'),
+            font=dict(color='#FFFFFF', size=16),  # White text
             x=0.5,
             xanchor='center',
             y=0.95
@@ -313,35 +325,70 @@ def plot_sales_data(actual_data, predicted_data, title, freq='D'):
         xaxis=dict(
             title='Date',
             gridcolor='rgba(176, 196, 222, 0.1)',
-            title_font_color='#E6E6FA',
-            tickfont_color='#E6E6FA',
-            rangeslider=dict(visible=False)
+            title_font=dict(color='#FFFFFF', size=14),  # White text
+            tickfont=dict(color='#FFFFFF', size=12),  # White text
+            rangeslider=dict(visible=False),
+            showgrid=True,
+            zeroline=False
         ),
         yaxis=dict(
             title='Sales ($)',
             gridcolor='rgba(176, 196, 222, 0.1)',
-            title_font_color='#E6E6FA',
-            tickfont_color='#E6E6FA',
-            tickprefix='$'
+            title_font=dict(color='#FFFFFF', size=14),  # White text
+            tickfont=dict(color='#FFFFFF', size=12),  # White text
+            tickprefix='$',
+            showgrid=True,
+            zeroline=False
         ),
         showlegend=True,
         legend=dict(
-            font=dict(color='#E6E6FA'),
+            font=dict(color='#FFFFFF', size=12),  # White text
             bgcolor='rgba(25, 25, 112, 0.3)',
+            bordercolor='rgba(255, 255, 255, 0.2)',
+            borderwidth=1,
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
             x=1
         ),
-        margin=dict(l=30, r=20, t=40, b=30, pad=0),
-        height=450,  # Slightly reduced height
+        margin=dict(l=60, r=60, t=60, b=60, pad=10),  # Increased margins
+        height=450,
         autosize=True,
         width=None,
         plot_bgcolor='rgba(25, 25, 112, 0.3)',
         paper_bgcolor='rgba(25, 25, 112, 0.3)',
         template="plotly_dark",
-        hovermode='x unified'
+        hovermode='x unified',
+        shapes=[
+            # Add border
+            dict(
+                type='rect',
+                xref='paper',
+                yref='paper',
+                x0=0,
+                y0=0,
+                x1=1,
+                y1=1,
+                line=dict(
+                    color='rgba(255, 255, 255, 0.2)',
+                    width=1
+                ),
+                fillcolor='rgba(0, 0, 0, 0)'
+            )
+        ]
+    )
+    
+    # Ensure the plot stays within bounds
+    fig.update_xaxes(
+        automargin=True,
+        constrain='domain',
+        fixedrange=True  # Disable zoom
+    )
+    fig.update_yaxes(
+        automargin=True,
+        constrain='domain',
+        fixedrange=True  # Disable zoom
     )
     
     return fig
@@ -510,92 +557,4 @@ try:
 
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
-    st.error("Please make sure the data file exists and is properly formatted.")
-
-# Add sections with consistent headers
-st.markdown("""<h2 class="table-header">📊 Sales Overview</h2>""", unsafe_allow_html=True)
-
-# Create view selector with proper spacing
-with st.container():
-    st.markdown('<div class="view-selector">', unsafe_allow_html=True)
-    tab1, tab2, tab3 = st.tabs(["Daily View", "Monthly View", "Quarterly View"])
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# Add spacing before filter section
-st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-
-# Create filter section with proper spacing
-with st.container():
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Year filter
-        available_years = get_available_years(df_actual)
-        selected_year = st.selectbox(
-            "Select Year",
-            ["All Years"] + available_years,
-            key="year_filter"
-        )
-
-    with col2:
-        # Month filter
-        available_months = get_available_months(df_actual, selected_year if selected_year != "All Years" else None)
-        selected_month = st.selectbox(
-            "Select Month",
-            ["All Months"] + [calendar.month_name[m] for m in available_months],
-            key="month_filter"
-        )
-
-    with col3:
-        # View type filter
-        view_type = st.selectbox(
-            "Select View",
-            ["Daily", "Monthly", "Quarterly"],
-            key="view_filter"
-        )
-
-# Add spacing after filter section
-st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-
-# Create metrics section with proper spacing
-with st.container():
-    metric1, metric2, metric3 = st.columns(3)
-    
-    with metric1:
-        st.metric(
-            "Total Sales",
-            format_currency(total_sales),
-            help="Total sales for the selected period"
-        )
-    
-    with metric2:
-        st.metric(
-            "Average Daily Sales",
-            format_currency(avg_daily_sales),
-            help="Average daily sales for the selected period"
-        )
-    
-    with metric3:
-        st.metric(
-            "Sales Variance",
-            format_currency(sales_variance),
-            help="Variance in sales for the selected period"
-        )
-
-# Add spacing before chart section
-st.markdown("<div style='margin-top: 2rem;'></div>", unsafe_allow_html=True)
-
-# Add the main chart section
-st.markdown("""<h2 class="table-header">📈 Sales Trends</h2>""", unsafe_allow_html=True)
-
-# Display the plot with proper container styling
-st.plotly_chart(
-    plot_sales_data(daily_actual, daily_predicted, " - ".join(title_parts), freq='D'),
-    use_container_width=True,
-    config={
-        'displayModeBar': False,
-        'responsive': True,
-        'scrollZoom': False,
-        'staticPlot': True
-    }
-) 
+    st.error("Please make sure the data file exists and is properly formatted.") 
