@@ -4,28 +4,36 @@ This file contains all color schemes and styling constants used across the app.
 """
 
 # Main color scheme
+
+
+# Main color scheme - Blue & Purple Professional Theme
 COLORS = {
-    'primary': '#ff5722',    # Deep orange - main accent color
-    'secondary': '#f4511e',  # Darker orange - secondary accent color
-    'background': '#0e1117', # Dark background
-    'text': '#fafafa',      # Light text
-    'accent': '#ffa726',    # Yellow-orange accent
-    'success': '#e64a19',   # Reddish-orange for positive values
-    'warning': '#ff7043',   # Light orange for warnings
-    'error': '#d84315',     # Deep reddish-orange for errors
-    'info': '#ffb74d',      # Light orange for information
+    # --- Base & Text ---
+    'background': '#191970', # Midnight Blue - a deep, rich background
+    'text': '#E6E6FA',      # Lavender - for high contrast and a soft feel
+
+    # --- Primary UI Elements ---
+    'primary': '#4169E1',    # Royal Blue - a strong, confident primary color for buttons/actions
+    'secondary': '#7B68EE',  # Medium Slate Blue - a vibrant secondary color for accents
+    'accent': '#9370DB',     # Medium Purple - for highlights, active states, or special elements
+
+    # --- Semantic / Status Colors (Best Practice) ---
+    'success': '#4DB6AC',   # Teal - a calming, positive color that complements blues
+    'warning': '#FFCA28',   # Amber/Yellow - standard, universally understood warning color
+    'error': '#EF5350',     # Red - standard, universally understood error color
+    'info': '#82B1FF',      # Light Blue - a clear and friendly color for informational alerts
 }
 
 # Chart color sequences
 CHART_COLORS = [
-    COLORS['primary'],      # Deep orange
-    COLORS['secondary'],    # Darker orange
-    '#e64a19',             # Reddish-orange
-    '#d84315',             # Deep reddish-orange
-    '#ffa726',             # Yellow-orange
-    '#ff7043',             # Light orange
-    '#ffb74d',             # Light orange
-    '#ff9800',             # Orange
+    '#4169E1',  # Royal Blue
+    '#6A5ACD',  # Slate Blue
+    '#9370DB',  # Medium Purple
+    '#8A2BE2',  # Blue Violet
+    '#E6E6FA',  # Lavender
+    '#B0C4DE',  # Light Steel Blue
+    '#7B68EE',  # Medium Slate Blue
+    '#A8C4E9',  # Light Blue
 ]
 
 # Common CSS styles

@@ -20,11 +20,11 @@ add_page_title(
 
 # Update the color scheme constants
 COLOR_SCHEME = {
-    'primary': '#FF4B4B',    # Red
-    'secondary': '#FF8C00',  # Dark Orange
-    'accent': '#FFD700',     # Gold
-    'text_primary': '#2C3E50',
-    'background': 'rgba(255, 244, 230, 0.1)'  # Light warm background
+    'primary': '#4169E1',    # Royal Blue
+    'secondary': '#9370DB',  # Medium Purple
+    'accent': '#E6E6FA',     # Lavender
+    'text_primary': '#E6E6FA',
+    'background': 'rgba(25, 25, 112, 0.1)'  # Midnight Blue with opacity
 }
 
 # Initialize BigQuery client
@@ -49,11 +49,12 @@ try:
     # Update KPI metrics styling
     st.markdown("""
         <div style="
-            background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+            background: linear-gradient(135deg, #A8C4E9, #E0D3ED);
             padding: 20px;
             border-radius: 10px;
             margin: 10px 0;
-            border: 1px solid rgba(255, 140, 0, 0.2);
+            border: 2px solid #4A78B3;
+            box-shadow: 0 2px 6px rgba(74, 120, 179, 0.2);
         ">
         <h2 class="metric-header">Key Performance Indicators</h2>
         </div>
@@ -74,11 +75,12 @@ try:
     # Promotional Impact Analysis
     st.markdown("""
         <div style="
-            background: linear-gradient(135deg, rgba(255, 75, 75, 0.1), rgba(255, 140, 0, 0.1));
+            background: linear-gradient(135deg, #A8C4E9, #E0D3ED);
             padding: 20px;
             border-radius: 10px;
             margin: 20px 0;
-            border: 1px solid rgba(255, 140, 0, 0.2);
+            border: 2px solid #4A78B3;
+            box-shadow: 0 2px 6px rgba(74, 120, 179, 0.2);
         ">
         <h2 class="analysis-header">Promotional Impact Analysis</h2>
         </div>
@@ -142,14 +144,14 @@ try:
         x=filtered_data['date'],
         y=filtered_data['total_net_sales'],
         name='Net Sales',
-        line=dict(color='#FF4B4B', width=2)  # Red
+        line=dict(color='#2B4C7E', width=2)  # Dark Blue
     ))
 
     fig_time.add_trace(go.Scatter(
         x=filtered_data['date'],
         y=filtered_data['total_volume'],
         name='Sales Volume',
-        line=dict(color='#FFD700', width=2),  # Gold
+        line=dict(color='#4A78B3', width=2),  # Medium Blue
         yaxis='y2'
     ))
 
@@ -157,25 +159,25 @@ try:
         title='Net Sales and Volume Over Time',
         xaxis=dict(
             title='Date',
-            gridcolor='rgba(255, 140, 0, 0.1)',
-            title_font_color='#FF8C00'
+            gridcolor='rgba(74, 120, 179, 0.1)',  # Medium Blue with opacity
+            title_font_color='#2B4C7E'
         ),
         yaxis=dict(
             title='Net Sales ($)',
-            titlefont=dict(color='#FF4B4B'),
-            tickfont=dict(color='#FF4B4B'),
-            gridcolor='rgba(255, 75, 75, 0.1)'
+            titlefont=dict(color='#2B4C7E'),
+            tickfont=dict(color='#2B4C7E'),
+            gridcolor='rgba(74, 120, 179, 0.1)'
         ),
         yaxis2=dict(
             title='Sales Volume',
-            titlefont=dict(color='#FFD700'),
-            tickfont=dict(color='#FFD700'),
+            titlefont=dict(color='#4A78B3'),
+            tickfont=dict(color='#4A78B3'),
             overlaying='y',
             side='right',
-            gridcolor='rgba(255, 215, 0, 0.1)'
+            gridcolor='rgba(74, 120, 179, 0.1)'
         ),
-        plot_bgcolor='rgba(255, 244, 230, 0.1)',
-        paper_bgcolor='rgba(255, 244, 230, 0)',
+        plot_bgcolor='#E6EEF8',  # Light Blue
+        paper_bgcolor='#F8FAFC',  # Very Light Blue
         height=500,
         showlegend=True,
         legend=dict(
@@ -184,7 +186,7 @@ try:
             y=1.02,
             xanchor="right",
             x=1,
-            font=dict(color='#2C3E50')
+            font=dict(color='#2B4C7E')
         )
     )
 
@@ -198,7 +200,7 @@ except Exception as e:
 st.markdown("""
     <style>
     .dashboard-header {
-        background: linear-gradient(45deg, #FF4B4B, #FF8C00);
+        background: linear-gradient(45deg, #4169E1, #9370DB);  /* Royal Blue to Medium Purple */
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-size: 2.5em;
@@ -208,34 +210,33 @@ st.markdown("""
         padding: 20px;
     }
     .metric-header, .analysis-header {
-        color: #FF4B4B;
+        color: #4169E1;  /* Royal Blue */
         font-size: 1.8em;
         margin-top: 1em;
         margin-bottom: 0.5em;
-        border-left: 5px solid #FF8C00;
+        border-left: 5px solid #9370DB;  /* Medium Purple */
         padding-left: 10px;
     }
     div[data-testid="stMetricValue"] {
-        color: #FF4B4B !important;
+        color: #4169E1 !important;  /* Royal Blue */
         font-weight: bold;
     }
     div[data-testid="stMetricLabel"] {
-        color: #FF8C00 !important;
+        color: #9370DB !important;  /* Medium Purple */
     }
     div[data-testid="stMetricDelta"] {
-        color: #FFD700 !important;
+        color: #E6E6FA !important;  /* Lavender */
     }
     div[data-testid="stHorizontalBlock"] > div {
-        background-color: rgba(255, 244, 230, 0.1);
+        background-color: rgba(25, 25, 112, 0.1);  /* Midnight Blue with opacity */
         border-radius: 10px;
         padding: 10px !important;
-        border: 1px solid rgba(255, 140, 0, 0.2);
+        border: 1px solid rgba(147, 112, 219, 0.2);  /* Medium Purple with opacity */
     }
     div[data-testid="stHorizontalBlock"] > div:hover {
-        box-shadow: 0 0 10px rgba(255, 140, 0, 0.2);
+        box-shadow: 0 0 10px rgba(147, 112, 219, 0.2);  /* Medium Purple with opacity */
         transform: translateY(-2px);
         transition: all 0.3s ease;
     }
     </style>
-"""
-, unsafe_allow_html=True) 
+""", unsafe_allow_html=True) 

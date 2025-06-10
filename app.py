@@ -19,31 +19,31 @@ st.markdown("""
     .main-title {
         font-size: 4em !important;
         font-weight: bold;
-        background: linear-gradient(45deg, #ff5722, #ffa726);
+        background: linear-gradient(45deg, #4169E1, #9370DB);  /* Royal Blue to Medium Purple */
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         padding-bottom: 20px;
     }
     .subtitle {
         font-size: 1.5em !important;
-        color: #95a5a6;
+        color: #E6E6FA;  /* Lavender */
         margin-bottom: 2em;
     }
     .feature-header {
         font-size: 1.8em !important;
-        color: #ff5722;
+        color: #4169E1;  /* Royal Blue */
         margin-bottom: 1em;
     }
     .feature-text {
         font-size: 1.2em !important;
-        color: #bdc3c7;
+        color: #E6E6FA;  /* Lavender */
     }
     .centered {
         text-align: center;
     }
     .feature-box {
-        background: rgba(255, 87, 34, 0.1);
-        border: 1px solid rgba(255, 87, 34, 0.3);
+        background: rgba(65, 105, 225, 0.1);  /* Royal Blue with opacity */
+        border: 1px solid rgba(147, 112, 219, 0.3);  /* Medium Purple with opacity */
         border-radius: 10px;
         padding: 1.5rem;
         margin: 1rem 0;
@@ -51,7 +51,7 @@ st.markdown("""
     }
     .feature-box:hover {
         transform: translateY(-5px);
-        box-shadow: 0 5px 15px rgba(255, 87, 34, 0.2);
+        box-shadow: 0 5px 15px rgba(65, 105, 225, 0.2);  /* Royal Blue with opacity */
     }
 </style>
 """, unsafe_allow_html=True)

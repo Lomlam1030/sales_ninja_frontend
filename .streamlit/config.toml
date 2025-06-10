@@ -1,6 +1,16 @@
 [theme]
-primaryColor="#ff5722"
-backgroundColor="#0e1117"
-secondaryBackgroundColor="#262730"
-textColor="#fafafa"
-font="sans serif" 
+base="dark"
+primaryColor="#4169E1"  # Royal Blue
+backgroundColor="#191970"  # Midnight Blue
+secondaryBackgroundColor="#1a1a4d"  # Darker Midnight Blue for secondary elements
+textColor="#E6E6FA"  # Lavender for better readability
+font="sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+enableStaticServing = true 

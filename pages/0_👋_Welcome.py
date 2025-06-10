@@ -3,7 +3,58 @@ from utils.page_config import set_page_config, add_page_title
 from utils.theme import COLORS, get_css
 
 # Configure the page
-set_page_config(title="Welcome")
+set_page_config(title="Sales Ninja | Home")
+
+# Custom CSS for styling
+st.markdown("""
+    <style>
+        /* Markdown text styling */
+        .element-container div.stMarkdown p {
+            color: #4169E1 !important;  /* Royal Blue */
+        }
+        
+        .element-container div.stMarkdown h1,
+        .element-container div.stMarkdown h2,
+        .element-container div.stMarkdown h3,
+        .element-container div.stMarkdown h4,
+        .element-container div.stMarkdown h5,
+        .element-container div.stMarkdown h6 {
+            color: #4169E1 !important;  /* Royal Blue */
+        }
+        
+        .element-container div.stMarkdown a {
+            color: #1E90FF !important;  /* Dodger Blue for links */
+        }
+        
+        .element-container div.stMarkdown li {
+            color: #4169E1 !important;  /* Royal Blue */
+        }
+        
+        /* Welcome page specific styling */
+        .welcome-header {
+            color: #4169E1;
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 1em;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .feature-box {
+            background-color: rgba(65, 105, 225, 0.1);
+            border: 1px solid rgba(65, 105, 225, 0.3);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(65, 105, 225, 0.2);
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # Add the styled title and CSS
 st.markdown(get_css(), unsafe_allow_html=True)

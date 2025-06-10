@@ -13,7 +13,7 @@ import plotly.express as px
 from utils.data_loader import initialize_session_state, get_geography_data
 
 # Configure the page
-st.set_page_config(layout="wide", page_title="Geography - Sales Ninja")
+set_page_config(title="Sales Ninja | Analytics | Geographic Distribution")
 
 # Add CSS and title
 st.markdown(get_css(), unsafe_allow_html=True)
@@ -23,8 +23,8 @@ add_page_title(
     emoji="🌍"
 )
 
-# Define warm color palette at the top of the file
-warm_colors = ["#FF4B4B", "#FF8C00", "#FFD700"]  # Red, Dark Orange, Gold
+# Define cool color palette at the top of the file
+cool_colors = ["#4169E1", "#9370DB", "#E6E6FA"]  # Royal Blue, Medium Purple, Lavender
 
 # Helper Functions
 def format_currency(value):
@@ -156,7 +156,7 @@ def create_map(data, geojson_data, metric='sales_sum'):
         vmax = 1
     
     colormap = cm.LinearColormap(
-        colors=['#FFE5B4', '#FFD700', '#FFA500', '#FF4500'],
+        colors=['#E6E6FA', '#9370DB', '#6A5ACD', '#4169E1'],  # Lavender to Royal Blue gradient
         vmin=vmin,
         vmax=vmax
     )
@@ -458,14 +458,14 @@ if len(map_aggregated_data) > 0:
 
     fig = px.bar(
         map_aggregated_data,
-        x=region_col,  # Use region_col which is either 'country' or 'continent'
+        x=region_col,
         y=bar_metric_col,
         title=chart_title,
         labels={
-            region_col: 'Region',  # Label it as Region in the display
+            region_col: 'Region',
             bar_metric_col: chart_metric
         },
-        color_discrete_sequence=['#DAA520'],  # Dark golden yellow
+        color_discrete_sequence=['#6A5ACD'],  # Slate Blue
         height=400
     )
 
@@ -676,7 +676,7 @@ if len(map_aggregated_data) > 0:
                     'x_label': title_period,
                     selected_metric: time_metric
                 },
-                color_discrete_sequence=['#DAA520'],  # Dark golden yellow
+                color_discrete_sequence=['#6A5ACD'],  # Slate Blue
                 height=400
             )
 
