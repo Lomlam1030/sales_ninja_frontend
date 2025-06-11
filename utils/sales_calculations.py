@@ -1,9 +1,14 @@
+"""Sales calculation utilities for the Sales Ninja dashboard."""
+
 import pandas as pd
 import numpy as np
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from google.cloud import bigquery
 from config.bq_client import client, PROJECT_ID, DATASET, ACTUALS_TABLE, PREDICTIONS_TABLE
+
+from services.data_source import get_data_source
+from config.settings import settings
 
 def load_dashboard_data(
     year: Optional[int] = 2007,
@@ -106,43 +111,107 @@ def load_dashboard_data(
         print(f"Error loading data from BigQuery: {str(e)}")
         raise
 
-def calculate_daily_net_sales(
-    df_actual: pd.DataFrame,
-    df_predicted: pd.DataFrame,
-    year: Optional[int] = None,
-    month: Optional[int] = None,
-    week: Optional[int] = None
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def calculate_daily_net_sales(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate daily net sales from transaction data."""
+    return df.groupby('date')['net_sales'].sum().reset_index()
+
+def get_sales_summary_stats(df: pd.DataFrame) -> Dict[str, float]:
+    """Calculate summary statistics for sales data."""
+    return {
+        'total_sales': df['net_sales'].sum(),
+        'avg_daily_sales': df['net_sales'].mean(),
+        'max_daily_sales': df['net_sales'].max(),
+        'min_daily_sales': df['net_sales'].min(),
+        'total_transactions': len(df),
+        'total_quantity': df['SalesQuantity'].sum()
+    }
+
+def calculate_category_performance(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate sales performance by product category."""
+    return df.groupby('ProductCategoryName').agg({
+        'net_sales': ['sum', 'mean', 'count'],
+        'SalesQuantity': 'sum'
+    }).round(2)
+
+def calculate_store_performance(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate sales performance by store."""
+    return df.groupby(['StoreName', 'StoreType']).agg({
+        'net_sales': ['sum', 'mean', 'count'],
+        'SalesQuantity': 'sum'
+    }).round(2)
+
+def calculate_promotion_impact(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate the impact of promotions on sales."""
+    promotion_stats = df.groupby('PromotionName').agg({
+        'net_sales': ['mean', 'sum', 'count'],
+        'DiscountAmount': ['mean', 'sum']
+    }).round(2)
+    
+    # Calculate ROI
+    promotion_stats['ROI'] = (
+        (promotion_stats[('net_sales', 'sum')] - promotion_stats[('DiscountAmount', 'sum')]) 
+        / promotion_stats[('DiscountAmount', 'sum')]
+    ).round(3)
+    
+    return promotion_stats
+
+def calculate_prediction_accuracy(
+    actual: pd.DataFrame,
+    predicted: pd.DataFrame,
+    group_by: Optional[str] = None
+) -> pd.DataFrame:
     """
-    Calculate daily net sales for both actual and predicted data.
+    Calculate prediction accuracy metrics.
     
     Args:
-        df_actual (pd.DataFrame): Actual sales data
-        df_predicted (pd.DataFrame): Predicted sales data
-        year (int, optional): Year to filter the data
-        month (int, optional): Month to filter the data (1-12)
-        week (int, optional): Week number to filter the data (1-53)
+        actual: Actual sales data
+        predicted: Predicted sales data
+        group_by: Optional column to group by before calculating accuracy
     
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: Daily sales data for (actual, predicted)
+        DataFrame with accuracy metrics
     """
-    def filter_and_aggregate(df):
-        # Create a copy of the dataframe
-        data = df.copy()
+    if group_by:
+        actual_grouped = actual.groupby([group_by, 'date'])['net_sales'].sum().reset_index()
+        predicted_grouped = predicted.groupby([group_by, 'date'])['net_sales'].sum().reset_index()
         
-        # Apply filters if specified
-        if year is not None:
-            data = data[data['date'].dt.year == year]
-        if month is not None:
-            data = data[data['date'].dt.month == month]
-        if week is not None:
-            data = data[data['date'].dt.isocalendar().week == week]
+        # Merge actual and predicted
+        comparison = actual_grouped.merge(
+            predicted_grouped,
+            on=[group_by, 'date'],
+            suffixes=('_actual', '_predicted')
+        )
         
-        # Group by date and calculate daily net sales
-        daily_sales = data.groupby('date')['net_sales'].sum().reset_index()
-        return daily_sales.sort_values('date')
+        # Calculate metrics by group
+        metrics = comparison.groupby(group_by).apply(lambda x: pd.Series({
+            'MAPE': np.mean(np.abs((x['net_sales_actual'] - x['net_sales_predicted']) / x['net_sales_actual'])) * 100,
+            'Accuracy': 100 - np.mean(np.abs((x['net_sales_actual'] - x['net_sales_predicted']) / x['net_sales_actual'])) * 100,
+            'Total_Actual': x['net_sales_actual'].sum(),
+            'Total_Predicted': x['net_sales_predicted'].sum(),
+            'Difference_%': ((x['net_sales_predicted'].sum() - x['net_sales_actual'].sum()) / x['net_sales_actual'].sum()) * 100
+        })).round(2)
+        
+    else:
+        # Calculate daily totals
+        actual_daily = actual.groupby('date')['net_sales'].sum()
+        predicted_daily = predicted.groupby('date')['net_sales'].sum()
+        
+        # Calculate overall metrics
+        mape = np.mean(np.abs((actual_daily - predicted_daily) / actual_daily)) * 100
+        accuracy = 100 - mape
+        total_actual = actual_daily.sum()
+        total_predicted = predicted_daily.sum()
+        difference_pct = ((total_predicted - total_actual) / total_actual) * 100
+        
+        metrics = pd.DataFrame([{
+            'MAPE': mape,
+            'Accuracy': accuracy,
+            'Total_Actual': total_actual,
+            'Total_Predicted': total_predicted,
+            'Difference_%': difference_pct
+        }]).round(2)
     
-    return filter_and_aggregate(df_actual), filter_and_aggregate(df_predicted)
+    return metrics
 
 def calculate_monthly_net_sales(
     df_actual: pd.DataFrame,
@@ -192,33 +261,6 @@ def calculate_quarterly_net_sales(
         return quarterly_sales.sort_values('date')
     
     return process_quarterly(df_actual), process_quarterly(df_predicted)
-
-def get_sales_summary_stats(
-    df_actual: pd.DataFrame,
-    df_predicted: pd.DataFrame,
-    year: Optional[int] = None,
-    month: Optional[int] = None,
-    week: Optional[int] = None
-) -> Tuple[dict, dict]:
-    """Calculate summary statistics for both actual and predicted net sales."""
-    daily_actual, daily_predicted = calculate_daily_net_sales(
-        df_actual, df_predicted, year, month, week
-    )
-    
-    def calculate_stats(data, prefix):
-        return {
-            f'{prefix}_total_sales': data['net_sales'].sum(),
-            f'{prefix}_average_daily_sales': data['net_sales'].mean(),
-            f'{prefix}_max_daily_sales': data['net_sales'].max(),
-            f'{prefix}_min_daily_sales': data['net_sales'].min(),
-            f'{prefix}_sales_std': data['net_sales'].std(),
-            f'{prefix}_total_days': len(data)
-        }
-    
-    actual_stats = calculate_stats(daily_actual, 'actual')
-    predicted_stats = calculate_stats(daily_predicted, 'predicted')
-    
-    return actual_stats, predicted_stats
 
 def get_monthly_summary_stats(
     df_actual: pd.DataFrame,

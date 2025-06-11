@@ -10,7 +10,12 @@ import plotly.graph_objects as go
 import numpy as np
 import calendar
 import plotly.express as px
-from utils.data_loader import initialize_session_state, get_geography_data
+from utils.data_loader import initialize_session_state, get_geography_data, load_dashboard_data, get_date_filters
+from utils.geography_calculations import (
+    prepare_geography_data,
+    get_continent_summary,
+    get_country_summary
+)
 
 # Configure the page
 set_page_config(title="Sales Ninja | Analytics | Geographic Distribution")
@@ -716,3 +721,145 @@ if len(map_aggregated_data) > 0:
     else:
         st.warning("No data available for the selected filters.")
         st.warning("Need both promotional and non-promotional data for comparison. Current distribution:\n\nPromotional transactions: 5\nNon-promotional transactions: 0\nUnable to calculate promotional impact. Please check the data or filters.")
+
+def main():
+    try:
+        # Get date filters
+        year, start_date, end_date = get_date_filters()
+        
+        # Load data
+        df_actual, _ = load_dashboard_data(year, start_date, end_date)
+        
+        if df_actual.empty:
+            st.warning("No data available for the selected period.")
+            return
+        
+        # Prepare geography data
+        geo_data = prepare_geography_data(df_actual)
+        
+        # Display summary metrics
+        st.header("📊 Sales by Geography")
+        
+        # Continent Overview
+        continent_data = get_continent_summary(df_actual)
+        
+        # Create continent map
+        fig_continent = px.choropleth(
+            geo_data,
+            locations='continent',
+            locationmode='country names',
+            color='net_sales_sum',
+            hover_data=['net_sales_sum', 'SalesQuantity_sum', 'return_rate', 'discount_rate'],
+            color_continuous_scale='Viridis',
+            labels={
+                'net_sales_sum': 'Total Sales ($)',
+                'SalesQuantity_sum': 'Units Sold',
+                'return_rate': 'Return Rate (%)',
+                'discount_rate': 'Discount Rate (%)'
+            },
+            title='Sales by Continent'
+        )
+        st.plotly_chart(fig_continent, use_container_width=True)
+        
+        # Continent Details
+        st.subheader("Continent Details")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Sales by Continent Bar Chart
+            fig_continent_bar = px.bar(
+                geo_data,
+                x='continent',
+                y='net_sales_sum',
+                title='Sales by Continent',
+                labels={'continent': 'Continent', 'net_sales_sum': 'Total Sales ($)'}
+            )
+            st.plotly_chart(fig_continent_bar, use_container_width=True)
+        
+        with col2:
+            # Return Rates by Continent
+            fig_returns = px.bar(
+                geo_data,
+                x='continent',
+                y='return_rate',
+                title='Return Rates by Continent',
+                labels={'continent': 'Continent', 'return_rate': 'Return Rate (%)'}
+            )
+            st.plotly_chart(fig_returns, use_container_width=True)
+        
+        # Country Analysis
+        st.header("🗺️ Country Analysis")
+        
+        # Filter by continent
+        selected_continent = st.selectbox(
+            "Select Continent",
+            options=['All'] + sorted(geo_data['continent'].unique().tolist())
+        )
+        
+        # Get country data
+        country_data = get_country_summary(
+            df_actual,
+            None if selected_continent == 'All' else selected_continent
+        )
+        
+        # Country comparison
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Top Countries by Sales
+            fig_countries = px.bar(
+                geo_data[geo_data['continent'] == selected_continent] if selected_continent != 'All' else geo_data,
+                x='country',
+                y='net_sales_sum',
+                title=f"Top Countries by Sales ({selected_continent})",
+                labels={'country': 'Country', 'net_sales_sum': 'Total Sales ($)'}
+            )
+            st.plotly_chart(fig_countries, use_container_width=True)
+        
+        with col2:
+            # Sales vs Returns Scatter
+            fig_scatter = px.scatter(
+                geo_data[geo_data['continent'] == selected_continent] if selected_continent != 'All' else geo_data,
+                x='net_sales_sum',
+                y='return_rate',
+                text='country',
+                title=f"Sales vs Return Rate ({selected_continent})",
+                labels={
+                    'net_sales_sum': 'Total Sales ($)',
+                    'return_rate': 'Return Rate (%)'
+                }
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+        
+        # Detailed Metrics Table
+        st.subheader("Detailed Metrics by Country")
+        detailed_metrics = geo_data.copy()
+        detailed_metrics['net_sales_sum'] = detailed_metrics['net_sales_sum'].map('${:,.2f}'.format)
+        detailed_metrics['net_sales_mean'] = detailed_metrics['net_sales_mean'].map('${:,.2f}'.format)
+        detailed_metrics['return_rate'] = detailed_metrics['return_rate'].map('{:.1f}%'.format)
+        detailed_metrics['discount_rate'] = detailed_metrics['discount_rate'].map('{:.1f}%'.format)
+        
+        if selected_continent != 'All':
+            detailed_metrics = detailed_metrics[detailed_metrics['continent'] == selected_continent]
+        
+        st.dataframe(
+            detailed_metrics,
+            column_config={
+                'country': 'Country',
+                'continent': 'Continent',
+                'net_sales_sum': 'Total Sales',
+                'net_sales_mean': 'Average Sales',
+                'SalesQuantity_sum': 'Units Sold',
+                'return_rate': 'Return Rate',
+                'discount_rate': 'Discount Rate'
+            },
+            hide_index=True
+        )
+    
+    except Exception as e:
+        st.error(f"Error loading or processing data: {str(e)}")
+        import traceback
+        st.error("Detailed error: " + traceback.format_exc())
+
+if __name__ == "__main__":
+    main()

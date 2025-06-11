@@ -1,23 +1,83 @@
-import pandas as pd
-from typing import Optional, Dict
-from datetime import datetime
+"""Geography data calculations for the Sales Ninja dashboard."""
 
-def get_geography_data() -> pd.DataFrame:
+import pandas as pd
+from typing import Dict, List, Optional, Tuple
+
+def prepare_geography_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Load and prepare the geographic sales data.
+    Prepare geography data for visualization.
+    
+    Args:
+        df: DataFrame with sales data containing geography columns
     
     Returns:
-        pd.DataFrame: Processed dashboard data with geographic information
+        DataFrame aggregated by geography with sales metrics
     """
-    df = pd.read_csv('data/data_dashboard_merged.csv')
+    # Group by geography columns and calculate metrics
+    geo_data = df.groupby(['country', 'continent']).agg({
+        'net_sales': ['sum', 'mean'],
+        'SalesQuantity': 'sum',
+        'ReturnQuantity': 'sum',
+        'DiscountAmount': 'sum'
+    }).round(2)
     
-    # Convert date for filtering
-    df['DateKey'] = pd.to_datetime(df['DateKey'])
-    df['Year'] = df['DateKey'].dt.year
-    df['Month'] = df['DateKey'].dt.month
-    df['Quarter'] = df['DateKey'].dt.quarter
+    # Flatten column names
+    geo_data.columns = [
+        f"{col[0]}_{col[1]}" if col[1] != '' else col[0]
+        for col in geo_data.columns
+    ]
     
-    return df
+    # Reset index to make geography columns regular columns
+    geo_data = geo_data.reset_index()
+    
+    # Calculate additional metrics
+    geo_data['return_rate'] = (
+        geo_data['ReturnQuantity_sum'] / geo_data['SalesQuantity_sum'] * 100
+    ).round(2)
+    
+    geo_data['discount_rate'] = (
+        geo_data['DiscountAmount_sum'] / geo_data['net_sales_sum'] * 100
+    ).round(2)
+    
+    return geo_data
+
+def get_continent_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Get sales summary by continent.
+    
+    Args:
+        df: DataFrame with sales data
+    
+    Returns:
+        DataFrame with continent-level metrics
+    """
+    return df.groupby('continent').agg({
+        'net_sales': ['sum', 'mean'],
+        'SalesQuantity': 'sum',
+        'ReturnQuantity': 'sum',
+        'DiscountAmount': 'sum'
+    }).round(2)
+
+def get_country_summary(df: pd.DataFrame, continent: Optional[str] = None) -> pd.DataFrame:
+    """
+    Get sales summary by country, optionally filtered by continent.
+    
+    Args:
+        df: DataFrame with sales data
+        continent: Optional continent to filter by
+    
+    Returns:
+        DataFrame with country-level metrics
+    """
+    if continent:
+        df = df[df['continent'] == continent]
+    
+    return df.groupby('country').agg({
+        'net_sales': ['sum', 'mean'],
+        'SalesQuantity': 'sum',
+        'ReturnQuantity': 'sum',
+        'DiscountAmount': 'sum'
+    }).round(2)
 
 def calculate_geographic_sales(df: pd.DataFrame, 
                              year: Optional[int] = None,
