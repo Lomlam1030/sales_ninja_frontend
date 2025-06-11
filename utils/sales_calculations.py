@@ -2,36 +2,52 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Tuple
 from datetime import datetime
+from google.cloud import bigquery
+from config.bq_client import client, PROJECT_ID, DATASET, ACTUALS_TABLE, PREDICTIONS_TABLE
 
 def load_dashboard_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load and prepare both actual and predicted sales data from CSV files.
+    Load and prepare both actual and predicted sales data from BigQuery.
     
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Tuple containing (actual_data, predicted_data)
     """
     # Load actual data
-    df_actual = pd.read_csv('data/data_dashboard_final.csv')
+    actual_query = f"""
+    SELECT
+        DateKey,
+        SalesAmount as net_sales,
+        ContinentName as continent,
+        CalendarYear as year,
+        *
+    FROM `{PROJECT_ID}.{DATASET}.{ACTUALS_TABLE}`
+    """
     
     # Load predicted data
-    df_predicted = pd.read_csv('data/synthetic_predicted_sales_2007_2010.csv')
+    predicted_query = f"""
+    SELECT
+        DateKey,
+        SalesAmount as net_sales,
+        ContinentName as continent,
+        CalendarYear as year,
+        *
+    FROM `{PROJECT_ID}.{DATASET}.{PREDICTIONS_TABLE}`
+    """
     
-    # Rename columns for both dataframes
-    column_mapping = {
-        'DateKey': 'date',
-        'SalesAmount': 'net_sales',
-        'ContinentName': 'continent',
-        'CalendarYear': 'year'
-    }
-    
-    df_actual = df_actual.rename(columns=column_mapping)
-    df_predicted = df_predicted.rename(columns=column_mapping)
-    
-    # Convert date columns to datetime
-    df_actual['date'] = pd.to_datetime(df_actual['date'])
-    df_predicted['date'] = pd.to_datetime(df_predicted['date'])
-    
-    return df_actual, df_predicted
+    try:
+        # Execute queries
+        df_actual = client.query(actual_query).to_dataframe()
+        df_predicted = client.query(predicted_query).to_dataframe()
+        
+        # Convert date columns to datetime
+        df_actual['date'] = pd.to_datetime(df_actual['DateKey'])
+        df_predicted['date'] = pd.to_datetime(df_predicted['DateKey'])
+        
+        return df_actual, df_predicted
+        
+    except Exception as e:
+        print(f"Error loading data from BigQuery: {str(e)}")
+        raise
 
 def calculate_daily_net_sales(
     df_actual: pd.DataFrame,

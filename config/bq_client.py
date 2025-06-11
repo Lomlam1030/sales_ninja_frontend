@@ -12,30 +12,24 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Constants
-PROJECT_ID = "nodal-clock-456815-g3"
-DATASET = "dashboard_data"
-ACTUALS_TABLE = "dashboard_merged_data"
-PREDICTIONS_TABLE = "dashboard_prediction_data"
+# Constants - load from environment variables with fallbacks
+PROJECT_ID = os.getenv('PROJECT_ID', 'nodal-clock-456815-g3')
+DATASET = os.getenv('DATASET', 'dashboard_data')
+ACTUALS_TABLE = os.getenv('ACTUALS_TABLE', 'dashboard_merged_data')
+PREDICTIONS_TABLE = os.getenv('PREDICTIONS_TABLE', 'dashboard_prediction_data')
 
 def get_bigquery_client():
     """
     Get an authenticated BigQuery client using service account credentials.
-    The service account key can be provided either through:
-    1. GOOGLE_APPLICATION_CREDENTIALS environment variable pointing to the key file
-    2. Direct JSON credentials in GOOGLE_CREDENTIALS environment variable
+    Credentials should be provided through GOOGLE_APPLICATION_CREDENTIALS
+    environment variable pointing to the key file location.
     """
     try:
-        # First try: Check for credentials JSON in environment variable
-        if 'GOOGLE_CREDENTIALS' in os.environ:
-            try:
-                credentials_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
-                credentials = service_account.Credentials.from_service_account_info(credentials_info)
-                return bigquery.Client(credentials=credentials, project=PROJECT_ID)
-            except Exception as e:
-                logger.warning(f"Failed to use GOOGLE_CREDENTIALS env var: {e}")
-
-        # Second try: Use GOOGLE_APPLICATION_CREDENTIALS environment variable
+        # Use GOOGLE_APPLICATION_CREDENTIALS environment variable
+        if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+            logger.error("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+            raise ValueError("Missing Google Cloud credentials")
+            
         return bigquery.Client(project=PROJECT_ID)
 
     except Exception as e:
