@@ -1,125 +1,161 @@
 import streamlit as st
-from utils.theme import get_css
-from utils.page_config import set_page_config, add_page_title
+import pandas as pd
+from datetime import datetime
+import plotly.express as px
+from typing import Optional
 
+from config.settings import settings
+from services.data_source import get_data_source
 
-# Configure the page with dark theme
+# Page config
 st.set_page_config(
-    page_title="Sales Ninja",
-    page_icon="🥷",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/yourusername/sales_ninja_frontend',
-        'Report a bug': "https://github.com/yourusername/sales_ninja_frontend/issues",
-        'About': "# Sales Ninja Analytics\nYour intelligent sales analytics platform."
-    }
+    page_title="Sales Ninja Dashboard",
+    page_icon="📊",
+    layout="wide"
 )
 
-# Custom CSS for styling
-st.markdown("""
-<style>
-    .main-title {
-        font-size: 4em !important;
-        font-weight: bold;
-        background: linear-gradient(45deg, #4169E1, #9370DB);  /* Royal Blue to Medium Purple */
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        padding-bottom: 20px;
-    }
-    .subtitle {
-        font-size: 1.5em !important;
-        color: #E6E6FA;  /* Lavender */
-        margin-bottom: 2em;
-    }
-    .feature-header {
-        font-size: 1.8em !important;
-        color: #4169E1;  /* Royal Blue */
-        margin-bottom: 1em;
-    }
-    .feature-text {
-        font-size: 1.2em !important;
-        color: #E6E6FA;  /* Lavender */
-    }
-    .centered {
-        text-align: center;
-    }
-    .feature-box {
-        background: rgba(65, 105, 225, 0.1);  /* Royal Blue with opacity */
-        border: 1px solid rgba(147, 112, 219, 0.3);  /* Medium Purple with opacity */
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        transition: all 0.3s ease;
-    }
-    .feature-box:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 5px 15px rgba(65, 105, 225, 0.2);  /* Royal Blue with opacity */
-    }
-</style>
-""", unsafe_allow_html=True)
+# Initialize session state
+if 'data_source' not in st.session_state:
+    try:
+        st.session_state.data_source = get_data_source()
+    except Exception as e:
+        st.error(f"Failed to initialize data source: {str(e)}")
+        st.stop()
 
-# Main content with centered layout
-col1, col2, col3 = st.columns([1, 2, 1])
+def load_data(
+    year: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+) -> tuple:
+    """Load and cache data from the configured data source."""
+    @st.cache_data(ttl=3600)  # Cache for 1 hour
+    def _load_data(y: Optional[int], sd: Optional[str], ed: Optional[str]):
+        with st.spinner("Loading sales data..."):
+            return st.session_state.data_source.load_dashboard_data(
+                year=y,
+                start_date=sd,
+                end_date=ed,
+                limit=settings.MAX_ROWS
+            )
+    return _load_data(year, start_date, end_date)
 
-with col2:
-    # Title and Logo
-    st.markdown('<div class="centered"><h1 class="main-title">🥷 Sales Ninja</h1></div>', unsafe_allow_html=True)
-    st.markdown('<div class="centered"><p class="subtitle">Your Intelligent Sales Analytics Platform</p></div>', unsafe_allow_html=True)
+def main():
+    st.title("📊 Sales Ninja Dashboard")
+    
+    # Data source info
+    st.sidebar.info(f"Data Source: {settings.DATA_SOURCE.value}")
+    
+    # Date filters
+    st.sidebar.header("📅 Date Filters")
+    filter_type = st.sidebar.radio(
+        "Filter by:",
+        ["Year", "Custom Date Range"],
+        index=0
+    )
+    
+    if filter_type == "Year":
+        year = st.sidebar.selectbox(
+            "Select Year",
+            options=[2007, 2008, 2009],
+            index=0
+        )
+        start_date = None
+        end_date = None
+    else:
+        year = None
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "Start Date",
+                value=datetime(2007, 1, 1),
+                min_value=datetime(2007, 1, 1),
+                max_value=datetime(2009, 12, 31)
+            )
+        with col2:
+            end_date = st.date_input(
+                "End Date",
+                value=datetime(2007, 12, 31),
+                min_value=datetime(2007, 1, 1),
+                max_value=datetime(2009, 12, 31)
+            )
+        start_date = start_date.strftime("%Y-%m-%d") if start_date else None
+        end_date = end_date.strftime("%Y-%m-%d") if end_date else None
+    
+    try:
+        # Load data
+        df_actual, df_predicted = load_data(year, start_date, end_date)
+        
+        # Display data info
+        st.sidebar.metric("Actual Data Points", f"{len(df_actual):,}")
+        st.sidebar.metric("Predicted Data Points", f"{len(df_predicted):,}")
+        
+        # Sales Overview
+        st.header("📈 Sales Overview")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_sales = df_actual["net_sales"].sum()
+            st.metric("Total Sales", f"${total_sales:,.2f}")
+        
+        with col2:
+            avg_sales = df_actual["net_sales"].mean()
+            st.metric("Average Sales", f"${avg_sales:,.2f}")
+        
+        with col3:
+            total_quantity = df_actual["SalesQuantity"].sum()
+            st.metric("Total Units Sold", f"{total_quantity:,}")
+        
+        # Sales Trend
+        st.subheader("Sales Trend")
+        daily_sales = df_actual.groupby("date")["net_sales"].sum().reset_index()
+        daily_predicted = df_predicted.groupby("date")["net_sales"].sum().reset_index()
+        
+        fig = px.line(
+            daily_sales,
+            x="date",
+            y="net_sales",
+            title="Daily Sales Trend",
+            labels={"date": "Date", "net_sales": "Sales Amount ($)"}
+        )
+        fig.add_scatter(
+            x=daily_predicted["date"],
+            y=daily_predicted["net_sales"],
+            name="Predicted",
+            line=dict(dash="dash")
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Product Categories
+        st.subheader("Sales by Product Category")
+        category_sales = df_actual.groupby("ProductCategoryName")["net_sales"].sum().sort_values(ascending=True)
+        fig = px.bar(
+            category_sales,
+            orientation="h",
+            title="Sales by Product Category",
+            labels={"value": "Sales Amount ($)", "ProductCategoryName": "Category"}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Store Performance
+        st.subheader("Store Performance")
+        store_sales = df_actual.groupby(["StoreName", "StoreType"])[["net_sales", "SalesQuantity"]].sum().reset_index()
+        fig = px.scatter(
+            store_sales,
+            x="net_sales",
+            y="SalesQuantity",
+            color="StoreType",
+            hover_data=["StoreName"],
+            title="Store Performance Analysis",
+            labels={
+                "net_sales": "Total Sales ($)",
+                "SalesQuantity": "Units Sold",
+                "StoreType": "Store Type"
+            }
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error loading or processing data: {str(e)}")
 
-    # Description
-    st.markdown("""
-    <div class="centered">
-        <p class="feature-text">
-            Welcome to Sales Ninja, your advanced analytics platform for sales performance monitoring and prediction.
-            Leverage the power of data-driven insights to optimize your business decisions.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Spacer
-    st.write("")
-    st.write("")
-
-    # Features
-    st.markdown('<h2 class="feature-header centered">Key Features</h2>', unsafe_allow_html=True)
-
-    # Feature columns
-    feat_col1, feat_col2, feat_col3 = st.columns(3)
-
-    with feat_col1:
-        st.markdown("""
-        <div class="feature-box centered">
-            <h3>📈 Sales Analytics</h3>
-            <p class="feature-text">Track daily, monthly, and quarterly sales performance with interactive visualizations</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with feat_col2:
-        st.markdown("""
-        <div class="feature-box centered">
-            <h3>🌍 Geographic Insights</h3>
-            <p class="feature-text">Analyze sales distribution across regions with interactive maps</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with feat_col3:
-        st.markdown("""
-        <div class="feature-box centered">
-            <h3>📊 Detailed Dashboard</h3>
-            <p class="feature-text">Deep dive into sales metrics and performance indicators</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Spacer
-    st.write("")
-    st.write("")
-
-    # Navigation Instructions
-    st.markdown("""
-    <div class="centered">
-        <p class="feature-text">
-            👈 Use the sidebar to navigate through the analytics pages
-        </p>
-    </div>
-    """, unsafe_allow_html=True) 
+if __name__ == "__main__":
+    main() 

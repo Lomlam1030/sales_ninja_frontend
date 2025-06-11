@@ -5,41 +5,98 @@ from datetime import datetime
 from google.cloud import bigquery
 from config.bq_client import client, PROJECT_ID, DATASET, ACTUALS_TABLE, PREDICTIONS_TABLE
 
-def load_dashboard_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_dashboard_data(
+    year: Optional[int] = 2007,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load and prepare both actual and predicted sales data from BigQuery.
+    
+    Args:
+        year (Optional[int]): Filter data for specific year (defaults to 2007)
+        start_date (Optional[str]): Start date in YYYY-MM-DD format (overrides year if provided)
+        end_date (Optional[str]): End date in YYYY-MM-DD format (overrides year if provided)
+        limit (Optional[int]): If provided, limits the number of rows returned
     
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Tuple containing (actual_data, predicted_data)
     """
-    # Load actual data
-    actual_query = f"""
-    SELECT
+    # Essential columns for the dashboard
+    common_columns = """
         DateKey,
         SalesAmount as net_sales,
         ContinentName as continent,
         CalendarYear as year,
-        *
-    FROM `{PROJECT_ID}.{DATASET}.{ACTUALS_TABLE}`
+        MonthNumber as month,
+        CalendarMonthLabel as month_name,
+        CalendarQuarterLabel as quarter,
+        ProductName,
+        ProductCategoryName,
+        PromotionName,
+        StoreName,
+        StoreType,
+        SalesQuantity,
+        ReturnQuantity,
+        DiscountAmount
     """
     
-    # Load predicted data
-    predicted_query = f"""
-    SELECT
-        DateKey,
-        SalesAmount as net_sales,
-        ContinentName as continent,
-        CalendarYear as year,
-        *
-    FROM `{PROJECT_ID}.{DATASET}.{PREDICTIONS_TABLE}`
+    # Build WHERE clause
+    where_conditions = []
+    if year:
+        where_conditions.append(f"CalendarYear = {year}")
+    if start_date:
+        where_conditions.append(f"DateKey >= '{start_date}'")
+    if end_date:
+        where_conditions.append(f"DateKey <= '{end_date}'")
+    
+    where_clause = ""
+    if where_conditions:
+        where_clause = "WHERE " + " AND ".join(where_conditions)
+    
+    # Load actual data with specific columns
+    actual_query = f"""
+    SELECT DISTINCT
+        {common_columns},
+        RegionCountryName as country
+    FROM `{PROJECT_ID}.{DATASET}.{ACTUALS_TABLE}`
+    {where_clause}
+    ORDER BY DateKey
     """
+    
+    # Load predicted data with specific columns
+    predicted_query = f"""
+    SELECT DISTINCT
+        {common_columns}
+    FROM `{PROJECT_ID}.{DATASET}.{PREDICTIONS_TABLE}`
+    {where_clause}
+    ORDER BY DateKey
+    """
+    
+    if limit:
+        actual_query += f" LIMIT {limit}"
+        predicted_query += f" LIMIT {limit}"
     
     try:
-        # Execute queries
-        df_actual = client.query(actual_query).to_dataframe()
-        df_predicted = client.query(predicted_query).to_dataframe()
+        print("Loading actual sales data...")
+        print(f"Query filters: {where_clause if where_conditions else 'None'}")
+        
+        job_config = bigquery.QueryJobConfig(
+            allow_large_results=True,
+            use_query_cache=True
+        )
+        
+        # Execute queries with job configuration
+        df_actual = client.query(actual_query, job_config=job_config).to_dataframe()
+        print(f"Loaded {len(df_actual):,} rows of actual data")
+        
+        print("\nLoading predicted sales data...")
+        df_predicted = client.query(predicted_query, job_config=job_config).to_dataframe()
+        print(f"Loaded {len(df_predicted):,} rows of predicted data")
         
         # Convert date columns to datetime
+        print("\nProcessing dates...")
         df_actual['date'] = pd.to_datetime(df_actual['DateKey'])
         df_predicted['date'] = pd.to_datetime(df_predicted['DateKey'])
         

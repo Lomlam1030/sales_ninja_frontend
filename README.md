@@ -1,39 +1,15 @@
 # Sales Ninja Frontend
 
-A comprehensive sales analytics dashboard with promotional impact analysis capabilities. This project provides both a web dashboard and REST API endpoints for analyzing sales performance and promotional effectiveness.
+A Streamlit dashboard for visualizing sales data with support for both BigQuery and REST API data sources.
 
 ## Features
 
-- 📊 Interactive Sales Dashboard
-- 📈 Promotional Impact Analysis
-- 📅 Time-based Analytics (Daily/Weekly/Monthly)
-- 🏪 Store Performance Metrics
-- 📦 Product Category Analysis
-- 🌐 REST API Endpoints
+- Flexible data source configuration (BigQuery or REST API)
+- Sales data visualization and analysis
+- Configurable data loading with filters
+- Secure credential management
 
-## Project Structure
-
-```
-sales_ninja_frontend/
-├── api/
-│   └── sales_api.py         # FastAPI endpoints
-├── pages/
-│   └── 3_📊_Dashboard.py    # Streamlit dashboard
-├── utils/
-│   ├── data_queries.py      # BigQuery data access
-│   └── page_config.py       # Dashboard configuration
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-## Prerequisites
-
-- Python 3.8+
-- Google Cloud Platform account with BigQuery access
-- Google Cloud credentials configured
-
-## Installation
+## Setup
 
 1. Clone the repository:
 ```bash
@@ -41,79 +17,100 @@ git clone https://github.com/yourusername/sales_ninja_frontend.git
 cd sales_ninja_frontend
 ```
 
-2. Create and activate a virtual environment:
+2. Create a virtual environment and install dependencies:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+3. Configure your environment:
+   - Copy `.env.example` to `.env`
+   - Edit `.env` with your configuration:
+
+```ini
+# Data Source Configuration
+# Options: bigquery, rest_api
+DATA_SOURCE=bigquery
+
+# BigQuery Settings (required if using BigQuery)
+GCP_PROJECT_ID=your-project-id
+BQ_DATASET=dashboard_data
+BQ_ACTUALS_TABLE=dashboard_merged_data
+BQ_PREDICTIONS_TABLE=dashboard_prediction_data
+GOOGLE_APPLICATION_CREDENTIALS=path/to/your/credentials.json
+
+# REST API Settings (required if using REST API)
+API_BASE_URL=http://localhost:8000
+API_VERSION=v1
+API_KEY=your-api-key
+
+# Data Loading Settings
+DEFAULT_YEAR=2007
+MAX_ROWS=1000  # Set to 0 for no limit
+```
+
+4. Run the application:
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+streamlit run app.py
 ```
 
-## Running the Application
+## Configuration
 
-### Dashboard
+### BigQuery Setup
 
-Run the Streamlit dashboard:
-```bash
-streamlit run pages/3_📊_Dashboard.py
+1. Create a service account in Google Cloud Console
+2. Download the service account key JSON file
+3. Set `GOOGLE_APPLICATION_CREDENTIALS` to point to your key file
+4. Set `DATA_SOURCE=bigquery` in your `.env` file
+
+### REST API Setup
+
+1. Ensure you have access to the backend API
+2. Get your API key from the backend team
+3. Set `DATA_SOURCE=rest_api` in your `.env` file
+4. Configure the API endpoint and key in your `.env` file
+
+## Development
+
+### Project Structure
+
+```
+sales_ninja_frontend/
+├── app.py                 # Main Streamlit application
+├── config/
+│   ├── settings.py       # Configuration management
+│   └── __init__.py
+├── services/
+│   ├── data_source.py    # Data source implementations
+│   └── __init__.py
+├── utils/
+│   └── sales_calculations.py  # Data processing utilities
+├── pages/                # Streamlit pages
+├── requirements.txt      # Python dependencies
+└── .env                  # Environment variables (not in git)
 ```
 
-The dashboard will be available at `http://localhost:8501`
+### Adding a New Data Source
 
-### API Server
-
-Run the FastAPI server:
-```bash
-uvicorn api.sales_api:app --reload
-```
-
-The API will be available at:
-- API Endpoints: `http://localhost:8000`
-- Swagger Documentation: `http://localhost:8000/docs`
-- ReDoc Documentation: `http://localhost:8000/redoc`
-
-## API Endpoints
-
-- `GET /sales/daily/` - Daily sales metrics
-- `GET /sales/monthly/` - Monthly aggregated metrics
-- `GET /sales/weekly/` - Weekly aggregated metrics
-- `GET /sales/kpi/` - Overall KPI metrics
-- `GET /sales/promotion-impact/` - Promotional analysis
-- `GET /sales/product-categories/` - Category-wise sales
-- `GET /sales/store-performance/` - Store performance metrics
-- `GET /health` - Health check endpoint
-
-## Environment Variables
-
-Create a `.env` file with the following variables:
-
-```env
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
-```
+1. Add a new enum value in `config/settings.py`
+2. Create a new class implementing `DataSourceInterface` in `services/data_source.py`
+3. Update the factory function `get_data_source()`
 
 ## Security
 
-- Ensure your Google Cloud credentials are properly secured
-- Never commit `.env` files or credential files to version control
-- Use appropriate IAM roles and permissions in Google Cloud
+- Never commit sensitive credentials to git
+- Use environment variables for all sensitive configuration
+- Keep your API keys and service account files secure
+- Regularly rotate your credentials
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
